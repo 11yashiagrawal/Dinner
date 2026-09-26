@@ -134,7 +134,7 @@ export class TaskMemory {
     return clipped({
       originalTask: this.task,
       repository: this.repositoryContext,
-      unresolvedFailures: this.failures,
+      failureHistory: this.failures,
       checks: this.checks,
       hypotheses: this.hypotheses,
       edits: this.edits,

@@ -1,6 +1,6 @@
 # AI coding harness: implementation and commit plan
 
-Status: proposed plan; no implementation commits have been made.
+Status: the core plan is implemented through release hardening. Organizer-specific model integration and final submission remain dependent on the provider and submission contract.
 
 ## Scope and assumptions
 

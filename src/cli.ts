@@ -15,7 +15,7 @@ Options:
   --repo <path>              Target Git repository
   --task <text>              Software-engineering task
   --task-file <path>         Read the task from a UTF-8 file
-  --output <path>            Artifact directory (default: .harness-runs/latest)
+  --output <path>            Artifact directory (default: unique OS temporary directory)
   --max-steps <integer>      Maximum agent actions (default: 40)
   --max-minutes <number>     Wall-clock limit in minutes (default: 20)
   --max-model-calls <int>    Maximum model calls (default: 30)

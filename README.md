@@ -1,6 +1,6 @@
 # Dinner
 
-Dinner is an autonomous coding harness for software-engineering tasks. It is being built in reviewable commits for the AI Harness Hackathon 2026.
+Dinner is an autonomous coding harness for software-engineering tasks, built in reviewable commits for the AI Harness Hackathon 2026.
 
 The current checkpoint provides an autonomous vertical slice with bounded memory, repair checkpoints, final-state evidence, stagnation controls, independent benchmarks, Docker commands, and patch export. The organizer-specific API transport remains pending; the CLI says this explicitly rather than guessing its protocol.
 

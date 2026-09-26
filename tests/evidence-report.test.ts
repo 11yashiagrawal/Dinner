@@ -14,12 +14,12 @@ function result(): AgentRunResult {
 }
 
 describe("evidence report", () => {
-  test("shows stale evidence, missing gates, unresolved failures, usage, and artifacts", () => {
+  test("shows stale evidence, missing gates, failure history, usage, and artifacts", () => {
     const report = renderEvidenceReport(result(), "final");
     expect(report).toContain("Status: **partial**");
     expect(report).toContain("Final-state verification: MISSING");
     expect(report).toContain("Stale evidence records: 1");
-    expect(report).toContain("Unresolved recorded failures: 1");
+    expect(report).toContain("Recorded failures (including recovered attempts): 1");
     expect(report).toContain("Calls with unavailable usage: 3");
     expect(report).toContain("/run/patch.diff");
   });

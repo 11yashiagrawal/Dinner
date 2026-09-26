@@ -28,7 +28,7 @@ export function renderEvidenceReport(result: AgentRunResult, finalFingerprint: s
     `- Final diff reviewed: ${mark(result.verification.diffReviewedForFinalState)}`,
     `- Final-state evidence records: ${finalEvidence.length}`,
     `- Stale evidence records: ${staleEvidence}`,
-    `- Unresolved recorded failures: ${result.recovery.failures.length}`,
+    `- Recorded failures (including recovered attempts): ${result.recovery.failures.length}`,
     "",
     "## Checks",
     "",

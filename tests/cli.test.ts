@@ -8,6 +8,7 @@ describe("runCli", () => {
 
     expect(exitCode).toBe(0);
     expect(output.join("\n")).toContain("Dinner — autonomous coding harness");
+    expect(output.join("\n")).toContain("default: unique OS temporary directory");
   });
 
   test("rejects unknown commands", async () => {
