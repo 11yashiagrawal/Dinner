@@ -178,6 +178,8 @@ describe("autonomous agent vertical slice", () => {
       status: "verified",
       changedFiles: ["src/math.ts"],
     });
+    expect(await Bun.file(result.reportPath).exists()).toBeTrue();
+    expect(await readFile(result.reportPath, "utf8")).toContain("Final-state verification: PASS");
     const events = (await readFile(result.eventsPath, "utf8"))
       .trim()
       .split("\n")
@@ -216,6 +218,7 @@ describe("autonomous agent vertical slice", () => {
     expect(result.metrics).toMatchObject({ steps: 1, modelCalls: 1 });
     expect(await Bun.file(result.patchPath).exists()).toBeTrue();
     expect(await Bun.file(result.resultPath).exists()).toBeTrue();
+    expect(await Bun.file(result.reportPath).exists()).toBeTrue();
   });
 
   test("does not accept a fabricated finish claim as verification", async () => {

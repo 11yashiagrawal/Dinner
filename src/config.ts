@@ -21,6 +21,7 @@ export interface RunConfig {
   apiKey?: string;
   modelScriptPath?: string;
   repositoryMapEnabled: boolean;
+  colorEnabled: boolean;
   budgets: {
     maxSteps: number;
     maxMinutes: number;
@@ -57,6 +58,7 @@ interface RunArguments {
   maxContextChars?: string;
   modelScript?: string;
   repositoryMap?: string;
+  color?: string;
 }
 
 export interface LoadRunConfigOptions {
@@ -81,6 +83,7 @@ const OPTION_NAMES = new Map<string, keyof RunArguments>([
   ["--max-context-chars", "maxContextChars"],
   ["--model-script", "modelScript"],
   ["--repository-map", "repositoryMap"],
+  ["--color", "color"],
 ]);
 
 function parseArguments(argv: string[]): RunArguments {
@@ -212,6 +215,13 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
       : args.repositoryMap === "enabled"
         ? true
         : (() => { throw new ConfigurationError("--repository-map must be enabled or disabled."); })(),
+    colorEnabled: args.color === undefined
+      ? env.NO_COLOR === undefined
+      : args.color === "enabled"
+        ? true
+        : args.color === "disabled"
+          ? false
+          : (() => { throw new ConfigurationError("--color must be enabled or disabled."); })(),
     budgets: {
       maxSteps: positiveInteger(args.maxSteps, DEFAULT_BUDGETS.maxSteps, "--max-steps"),
       maxMinutes: positiveNumber(args.maxMinutes, DEFAULT_BUDGETS.maxMinutes, "--max-minutes"),

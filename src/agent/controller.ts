@@ -13,6 +13,7 @@ import { classifyCommandFailure, commandFailureDetail, type FailureKind, type Fa
 import { IsolatedWorkspace, type WorkspaceCheckpoint, type WorkspaceState } from "../workspace";
 import { AgentEventWriter } from "./events";
 import { ProgressTracker } from "./progress";
+import { renderEvidenceReport } from "./report";
 import {
   emptyUsageSummary,
   recordUsage,
@@ -495,6 +496,7 @@ export async function runAutonomousTask(
     finalEvidence.at(-1)?.status === "passed" &&
     diffReviewedPatchSha === finalState.patchSha256;
   const resultPath = resolve(workspace.runRoot, "result.json");
+  const reportPath = resolve(workspace.runRoot, "report.md");
   const result: AgentRunResult = {
     runId,
     status,
@@ -506,6 +508,7 @@ export async function runAutonomousTask(
     resultPath,
     eventsPath: events.path,
     patchPath: exportValue.patchPath,
+    reportPath,
     changedFiles: exportValue.changedFiles,
     verification: {
       commandsRun: verificationCommands,
@@ -539,21 +542,34 @@ export async function runAutonomousTask(
     changedFiles: result.changedFiles,
     successfulFinalState,
   });
+  await writeFile(reportPath, renderEvidenceReport(result, finalState.patchSha256));
   await writeFile(resultPath, `${JSON.stringify(result, null, 2)}\n`);
   return result;
 }
 
-export function renderAgentEvent(event: AgentEvent): void {
-  if (event.type === "run_started") console.log(`▶ Run ${String((event.payload as { runId?: unknown }).runId)}`);
+export function createAgentEventRenderer(
+  write: (message: string) => void = console.log,
+  options: { color?: boolean } = {},
+): (event: AgentEvent) => void {
+  const color = options.color ?? true;
+  const paint = (code: number, text: string) => color ? `\u001b[${code}m${text}\u001b[0m` : text;
+  return (event) => {
+  if (event.type === "run_started") write(paint(36, `▶ Run ${String((event.payload as { runId?: unknown }).runId)}`));
   if (event.type === "model_decision") {
-    const action = (event.payload as { action?: { type?: unknown } }).action?.type;
-    console.log(`→ ${String(action)}`);
+    const payload = event.payload as { action?: { type?: unknown }; intent?: unknown };
+    const rationale = typeof payload.intent === "string" ? ` — ${payload.intent}` : "";
+    write(`→ ${String(payload.action?.type)}${rationale}`);
   }
-  if (event.type === "model_error") console.log(`! Model response error`);
-  if (event.type === "tool_result") console.log(`  Tool result recorded`);
+  if (event.type === "model_error") write(paint(31, "! Model response error"));
+  if (event.type === "tool_result") write("  Tool result recorded");
   if (event.type === "run_finished") {
-    console.log(`■ ${String((event.payload as { status?: unknown }).status)}`);
+    write(paint(32, `■ ${String((event.payload as { status?: unknown }).status)}`));
   }
+  };
+}
+
+export function renderAgentEvent(event: AgentEvent): void {
+  createAgentEventRenderer()(event);
 }
 
 export function defaultRunId(outputPath: string): string {

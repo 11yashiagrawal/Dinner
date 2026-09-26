@@ -34,6 +34,7 @@ describe("loadRunConfig", () => {
     expect(config.task).toBe("Fix the bug");
     expect(config.budgets).toEqual(DEFAULT_BUDGETS);
     expect(config.repositoryMapEnabled).toBeFalse();
+    expect(config.colorEnabled).toBeTrue();
   });
 
   test("reads a task file", async () => {
@@ -129,6 +130,18 @@ describe("loadRunConfig", () => {
       env: { AI_API_KEY: "secret" },
     });
     expect(config.repositoryMapEnabled).toBeTrue();
+  });
+
+  test("honors NO_COLOR and an explicit color override", async () => {
+    const cwd = await temporaryDirectory();
+    const plain = await loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it"], cwd, env: { AI_API_KEY: "secret", NO_COLOR: "1" },
+    });
+    const colored = await loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it", "--color", "enabled"], cwd, env: { AI_API_KEY: "secret", NO_COLOR: "1" },
+    });
+    expect(plain.colorEnabled).toBeFalse();
+    expect(colored.colorEnabled).toBeTrue();
   });
 
   test("omits the credential from public configuration", async () => {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { ConfigurationError, loadRunConfig, toPublicRunConfig } from "./config";
-import { loadFakeModelScript, renderAgentEvent, runAutonomousTask } from "./agent";
+import { createAgentEventRenderer, loadFakeModelScript, runAutonomousTask } from "./agent";
 
 export const HELP = `Dinner — autonomous coding harness
 
@@ -24,6 +24,7 @@ Options:
   --max-stagnation-interventions <n> Repeated-action limit (default: 2)
   --max-context-chars <n>    Approximate request character limit (default: 48000)
   --repository-map <enabled|disabled>  Add ranked source map to initial context (default: disabled)
+  --color <enabled|disabled>  Terminal color; NO_COLOR disables by default
   --model-script <path>      Development-only JSON decisions for the fake model
   --help                     Show this help
 `;
@@ -94,7 +95,7 @@ export async function runCli(
     if (config.apiKey !== undefined) runOptions.apiKey = config.apiKey;
     const result = await runAutonomousTask(runOptions, {
       model,
-      onEvent: renderAgentEvent,
+      onEvent: createAgentEventRenderer(stdout, { color: config.colorEnabled }),
     });
     stdout(JSON.stringify(result, null, 2));
     if (result.status === "verified") return 0;

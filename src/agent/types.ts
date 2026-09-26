@@ -41,6 +41,7 @@ export interface AgentRunResult {
   resultPath: string;
   eventsPath: string;
   patchPath: string;
+  reportPath: string;
   changedFiles: string[];
   verification: {
     commandsRun: number;
