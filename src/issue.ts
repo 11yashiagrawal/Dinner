@@ -14,6 +14,50 @@ interface GitHubIssueResponse {
   state?: unknown;
 }
 
+export type FetchLike = typeof fetch;
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'")
+    .replaceAll("&#x27;", "'");
+}
+
+function stripHtml(value: string): string {
+  return decodeHtmlEntities(
+    value
+      .replace(/<br\s*\/?>(\s*)/gi, "\n")
+      .replace(/<\/p>/gi, "\n")
+      .replace(/<[^>]*>/g, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim(),
+  );
+}
+
+function firstMatch(value: string, patterns: readonly RegExp[]): string | undefined {
+  for (const pattern of patterns) {
+    const match = value.match(pattern);
+    const group = match?.[1]?.trim();
+    if (group) return group;
+  }
+  return undefined;
+}
+
+export function normalizeIssueUrl(input: string): string {
+  const trimmed = input.trim();
+  const markdown = trimmed.match(/^\[([^\]]+)\]\((https:\/\/github\.com\/[^\s)]+)\)$/);
+  if (markdown?.[2]) return markdown[2];
+
+  const angleWrapped = trimmed.match(/^<([^>]+)>$/);
+  if (angleWrapped?.[1]) return angleWrapped[1].trim();
+
+  const embedded = trimmed.match(/https:\/\/github\.com\/[^\s)]+/);
+  return embedded?.[0] ?? trimmed;
+}
+
 export function formatIssueTask(issue: IssueTask): string {
   return [
     `Source issue: ${issue.url}`,
@@ -24,9 +68,10 @@ export function formatIssueTask(issue: IssueTask): string {
 }
 
 export function parseGitHubIssueUrl(url: string): { owner: string; repo: string; number: string } {
+  const normalizedUrl = normalizeIssueUrl(url);
   let parsed: URL;
   try {
-    parsed = new URL(url);
+    parsed = new URL(normalizedUrl);
   } catch {
     throw new Error(`Invalid issue URL: ${url}`);
   }
@@ -40,21 +85,54 @@ export function parseGitHubIssueUrl(url: string): { owner: string; repo: string;
   return { owner, repo, number };
 }
 
-export async function fetchGitHubIssueTask(url: string): Promise<IssueTask> {
-  const { owner, repo, number } = parseGitHubIssueUrl(url);
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${number}`, {
+async function fetchGitHubIssueFromPage(url: string, fetchImpl: FetchLike): Promise<IssueTask> {
+  const response = await fetchImpl(url, {
     headers: {
-      "accept": "application/vnd.github+json",
+      "accept": "text/html,application/xhtml+xml",
       "user-agent": "Dinner-AI-Coding-Harness",
     },
   });
   if (!response.ok) {
     throw new Error(`Unable to fetch issue ${url}: HTTP ${response.status}`);
   }
+
+  const html = await response.text();
+  const rawTitle = firstMatch(html, [
+    /<bdi[^>]*class="[^"]*js-issue-title[^"]*"[^>]*>([\s\S]*?)<\/bdi>/i,
+    /<span[^>]*class="[^"]*js-issue-title[^"]*"[^>]*>([\s\S]*?)<\/span>/i,
+    /<title>([\s\S]*?)<\/title>/i,
+  ]);
+  const rawBody = firstMatch(html, [
+    /<td[^>]*class="[^"]*comment-body[^"]*"[^>]*>([\s\S]*?)<\/td>/i,
+    /<div[^>]*class="[^"]*comment-body[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+  ]);
+
+  const title = rawTitle === undefined
+    ? ""
+    : stripHtml(rawTitle).replace(/\s*·\s*Issue #\d+.*$/i, "").trim();
+  const body = rawBody === undefined ? "" : stripHtml(rawBody);
+  if (title === "") throw new Error(`Fetched issue has no title: ${url}`);
+  return { url, title, body };
+}
+
+export async function fetchGitHubIssueTask(url: string, fetchImpl: FetchLike = fetch): Promise<IssueTask> {
+  const normalizedUrl = normalizeIssueUrl(url);
+  const { owner, repo, number } = parseGitHubIssueUrl(normalizedUrl);
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${number}`;
+  const response = await fetchImpl(apiUrl, {
+    headers: {
+      "accept": "application/vnd.github+json",
+      "user-agent": "Dinner-AI-Coding-Harness",
+      "x-github-api-version": "2022-11-28",
+    },
+  });
+  if (!response.ok) {
+    return fetchGitHubIssueFromPage(normalizedUrl, fetchImpl);
+  }
   const issue = await response.json() as GitHubIssueResponse;
   const title = typeof issue.title === "string" ? issue.title.trim() : "";
   const body = typeof issue.body === "string" ? issue.body : "";
-  const htmlUrl = typeof issue.html_url === "string" ? issue.html_url : url;
-  if (title === "") throw new Error(`Fetched issue has no title: ${url}`);
+  const htmlUrl = typeof issue.html_url === "string" ? issue.html_url : normalizedUrl;
+  if (title === "") throw new Error(`Fetched issue has no title: ${normalizedUrl}`);
   return { url: htmlUrl, title, body };
 }
