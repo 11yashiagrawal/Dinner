@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { ConfigurationError, loadRunConfig, toPublicRunConfig } from "./config";
+import { loadFakeModelScript, renderAgentEvent, runAutonomousTask } from "./agent";
 
 export const HELP = `Dinner — autonomous coding harness
 
@@ -18,6 +19,7 @@ Options:
   --max-steps <integer>      Maximum agent actions (default: 40)
   --max-minutes <number>     Wall-clock limit in minutes (default: 20)
   --max-model-calls <int>    Maximum model calls (default: 30)
+  --model-script <path>      Development-only JSON decisions for the fake model
   --help                     Show this help
 `;
 
@@ -63,8 +65,33 @@ export async function runCli(
     const config = await loadRunConfig(configOptions);
 
     stdout(JSON.stringify(toPublicRunConfig(config), null, 2));
-    stdout("Configuration accepted. The autonomous runtime will be connected in a later commit.");
-    return 0;
+    if (config.modelScriptPath === undefined) {
+      stderr(
+        "The organizer model transport is not configured yet. Use --model-script for deterministic development runs.",
+      );
+      return 3;
+    }
+
+    const model = await loadFakeModelScript(config.modelScriptPath);
+    const runOptions: Parameters<typeof runAutonomousTask>[0] = {
+      repoPath: config.repoPath,
+      outputPath: config.outputPath,
+      task: config.task,
+      maxSteps: config.budgets.maxSteps,
+      maxMinutes: config.budgets.maxMinutes,
+      maxModelCalls: config.budgets.maxModelCalls,
+    };
+    if (config.apiKey !== undefined) runOptions.apiKey = config.apiKey;
+    const result = await runAutonomousTask(runOptions, {
+      model,
+      onEvent: renderAgentEvent,
+    });
+    stdout(JSON.stringify(result, null, 2));
+    if (result.status === "verified") return 0;
+    if (result.status === "partial") return 3;
+    if (result.status === "blocked") return 4;
+    if (result.status === "budget_exhausted") return 5;
+    return 1;
   } catch (error) {
     if (error instanceof ConfigurationError) {
       stderr(`Configuration error: ${error.message}`);

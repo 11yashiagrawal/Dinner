@@ -7,6 +7,7 @@ import type {
   WorkspaceErrorCode,
   WorkspaceResult,
   WorkspaceSnapshot,
+  WorkspaceState,
 } from "./types";
 
 class WorkspaceException extends Error {
@@ -341,6 +342,19 @@ export class IsolatedWorkspace {
         patchPath,
         patchSha256: sha256(patch),
         changedFiles: await changedFiles(this.workspacePath, this.baselineRevision),
+      });
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  async inspectChanges(): Promise<WorkspaceResult<WorkspaceState>> {
+    try {
+      const patch = await patchFromBaseline(this.workspacePath, this.baselineRevision);
+      return success({
+        patchSha256: sha256(patch),
+        changedFiles: await changedFiles(this.workspacePath, this.baselineRevision),
+        bytes: Buffer.byteLength(patch),
       });
     } catch (error) {
       return failure(error);

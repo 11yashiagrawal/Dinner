@@ -14,7 +14,13 @@ export type ModelAction =
   | { type: "search"; query: string; path?: string; maxResults?: number }
   | { type: "read_file"; path: string; startLine?: number; endLine?: number }
   | { type: "apply_patch"; patch: string }
-  | { type: "run_command"; command: string; cwd?: string; timeoutMs?: number }
+  | {
+      type: "run_command";
+      command: string;
+      purpose?: "setup" | "agent" | "verification";
+      cwd?: string;
+      timeoutMs?: number;
+    }
   | { type: "inspect_diff" }
   | { type: "finish"; summary: string };
 

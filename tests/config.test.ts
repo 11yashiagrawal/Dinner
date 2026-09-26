@@ -86,6 +86,20 @@ describe("loadRunConfig", () => {
     ).rejects.toThrow("AI_API_KEY is required");
   });
 
+  test("allows deterministic model scripts without a credential", async () => {
+    const cwd = await temporaryDirectory();
+    await writeFile(join(cwd, "script.json"), "[]");
+    const config = await loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it", "--model-script", "script.json"],
+      cwd,
+      env: {},
+    });
+
+    expect(config.apiKey).toBeUndefined();
+    expect(config.modelScriptPath).toBe(join(cwd, "script.json"));
+    expect(config.outputPath).toContain("dinner-runs");
+  });
+
   test("rejects invalid budget values", async () => {
     const cwd = await temporaryDirectory();
     expect(

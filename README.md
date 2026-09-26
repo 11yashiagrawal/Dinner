@@ -2,7 +2,7 @@
 
 Dinner is an autonomous coding harness for software-engineering tasks. It is being built in reviewable commits for the AI Harness Hackathon 2026.
 
-The current checkpoint provides the TypeScript/Bun skeleton, validates CLI inputs and structured model actions, inspects repositories, executes target commands in disposable Docker containers, and manages isolated edits with checkpoints and patch export. The organizer-specific API transport and autonomous controller arrive in later commits; the CLI says this explicitly rather than pretending to run an agent.
+The current checkpoint provides the first autonomous vertical slice: validated fake-model decisions drive repository inspection, isolated edits, Docker commands, final-state verification, event recording, and patch export. The organizer-specific API transport remains pending; the CLI says this explicitly rather than guessing its protocol.
 
 Input repositories are never edited directly. The workspace manager snapshots tracked changes, deletions, staged content, and non-ignored untracked files into a separate Git worktree. Checkpoints and final patches are calculated against that exact snapshot, so supplied changes are part of the baseline rather than mistaken for agent edits.
 
@@ -34,13 +34,13 @@ Show the command contract:
 make run ARGS="--help"
 ```
 
-Validate a headless task invocation:
+Validate a live-provider configuration:
 
 ```bash
 AI_API_KEY=development-placeholder make run ARGS="--repo . --task 'Describe the requested code change'"
 ```
 
-The placeholder demonstrates configuration only and is not sent anywhere at this checkpoint. The CLI accepts either `--task` or `--task-file`, never both. If neither is supplied, it prompts only when connected to an interactive terminal; headless execution exits with an error.
+This currently exits after configuration because the organizer provider contract is pending. For an end-to-end deterministic run, provide `--model-script` as described below. The CLI accepts either `--task` or `--task-file`, never both. If neither is supplied, it prompts only when connected to an interactive terminal; headless execution exits with an error.
 
 Direct invocation exposes optional budgets:
 
@@ -48,11 +48,32 @@ Direct invocation exposes optional budgets:
 AI_API_KEY=development-placeholder bun run src/cli.ts run \
   --repo . \
   --task-file ./issue.txt \
-  --output ./.harness-runs/manual \
+  --output /tmp/dinner-manual \
   --max-steps 40 \
   --max-minutes 20 \
   --max-model-calls 30
 ```
+
+If `--output` is omitted, Dinner creates a unique run beneath the operating system's temporary directory. Output must be outside the target repository.
+
+### Deterministic fake-model runs
+
+A fake-model script is a JSON array containing one validated decision per model turn:
+
+```json
+[
+  { "intent": "inspect", "action": { "type": "list_files", "path": "." } },
+  { "intent": "finish", "action": { "type": "finish", "summary": "Inspection complete." } }
+]
+```
+
+Run it without an API key:
+
+```bash
+make run ARGS="--repo /path/to/target-repo --task 'Inspect the repository' --model-script /path/to/script.json --output /tmp/dinner-run"
+```
+
+The example finishes as `partial` because it neither changes code nor executes a successful verification command. A model cannot obtain `verified` merely by claiming success.
 
 ## Development checks
 

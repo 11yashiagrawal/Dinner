@@ -48,3 +48,9 @@ export interface PatchExport {
   changedFiles: string[];
   bytes: number;
 }
+
+export interface WorkspaceState {
+  patchSha256: string;
+  changedFiles: string[];
+  bytes: number;
+}

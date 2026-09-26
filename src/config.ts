@@ -1,6 +1,8 @@
 import { existsSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
 
 export const DEFAULT_BUDGETS = {
   maxSteps: 40,
@@ -12,7 +14,8 @@ export interface RunConfig {
   repoPath: string;
   task: string;
   outputPath: string;
-  apiKey: string;
+  apiKey?: string;
+  modelScriptPath?: string;
   budgets: {
     maxSteps: number;
     maxMinutes: number;
@@ -39,6 +42,7 @@ interface RunArguments {
   maxSteps?: string;
   maxMinutes?: string;
   maxModelCalls?: string;
+  modelScript?: string;
 }
 
 export interface LoadRunConfigOptions {
@@ -57,6 +61,7 @@ const OPTION_NAMES = new Map<string, keyof RunArguments>([
   ["--max-steps", "maxSteps"],
   ["--max-minutes", "maxMinutes"],
   ["--max-model-calls", "maxModelCalls"],
+  ["--model-script", "modelScript"],
 ]);
 
 function parseArguments(argv: string[]): RunArguments {
@@ -155,7 +160,7 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
   const cwd = options.cwd ?? process.cwd();
   const apiKey = env.AI_API_KEY?.trim();
 
-  if (apiKey === undefined || apiKey === "") {
+  if ((apiKey === undefined || apiKey === "") && args.modelScript === undefined) {
     throw new ConfigurationError("AI_API_KEY is required for a run.");
   }
 
@@ -167,11 +172,13 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
     options.promptForTask,
   );
 
-  return {
+  const config: RunConfig = {
     repoPath,
     task,
-    outputPath: resolve(cwd, args.output ?? ".harness-runs/latest"),
-    apiKey,
+    outputPath: resolve(
+      cwd,
+      args.output ?? resolve(tmpdir(), "dinner-runs", `run-${Date.now()}-${randomUUID()}`),
+    ),
     budgets: {
       maxSteps: positiveInteger(args.maxSteps, DEFAULT_BUDGETS.maxSteps, "--max-steps"),
       maxMinutes: positiveNumber(args.maxMinutes, DEFAULT_BUDGETS.maxMinutes, "--max-minutes"),
@@ -182,9 +189,12 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
       ),
     },
   };
+  if (apiKey !== undefined && apiKey !== "") config.apiKey = apiKey;
+  if (args.modelScript !== undefined) config.modelScriptPath = resolve(cwd, args.modelScript);
+  return config;
 }
 
 export function toPublicRunConfig(config: RunConfig): PublicRunConfig {
   const { apiKey: _secret, ...safeConfig } = config;
-  return { ...safeConfig, credentialConfigured: true };
+  return { ...safeConfig, credentialConfigured: config.apiKey !== undefined };
 }

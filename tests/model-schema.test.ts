@@ -12,7 +12,17 @@ describe("model response schema", () => {
     [{ action: { type: "search", query: "refreshToken", maxResults: 20 } }, "search"],
     [{ action: { type: "read_file", path: "src/a.ts", startLine: 1, endLine: 10 } }, "read_file"],
     [{ action: { type: "apply_patch", patch: "*** Begin Patch" } }, "apply_patch"],
-    [{ action: { type: "run_command", command: "bun test", timeoutMs: 30_000 } }, "run_command"],
+    [
+      {
+        action: {
+          type: "run_command",
+          command: "bun test",
+          purpose: "verification",
+          timeoutMs: 30_000,
+        },
+      },
+      "run_command",
+    ],
     [{ action: { type: "inspect_diff" } }, "inspect_diff"],
     [{ action: { type: "finish", summary: "Fixed and verified." } }, "finish"],
   ];
@@ -40,6 +50,9 @@ describe("model response schema", () => {
     expect(() => parseModelDecision({ action: { type: "search", query: "" } })).toThrow(
       ModelResponseValidationError,
     );
+    expect(() =>
+      parseModelDecision({ action: { type: "run_command", command: "test", purpose: "claim" } }),
+    ).toThrow("setup, agent, or verification");
   });
 
   test("distinguishes provider usage from unavailable usage", () => {

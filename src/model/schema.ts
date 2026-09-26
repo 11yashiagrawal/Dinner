@@ -99,12 +99,25 @@ function parseAction(value: unknown): ModelAction {
       const result: {
         type: "run_command";
         command: string;
+        purpose?: "setup" | "agent" | "verification";
         cwd?: string;
         timeoutMs?: number;
       } = {
         type: "run_command",
         command: requiredString(action.command, "action.command"),
       };
+      if (action.purpose !== undefined) {
+        if (
+          action.purpose !== "setup" &&
+          action.purpose !== "agent" &&
+          action.purpose !== "verification"
+        ) {
+          throw new ModelResponseValidationError(
+            "action.purpose must be setup, agent, or verification.",
+          );
+        }
+        result.purpose = action.purpose;
+      }
       withOptional(result, "cwd", optionalString(action.cwd, "action.cwd"));
       withOptional(
         result,

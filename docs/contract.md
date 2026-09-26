@@ -22,7 +22,9 @@ bun run src/cli.ts run \
   [--max-model-calls <positive-integer>]
 ```
 
-`make run` will invoke the same entrypoint once the organizer's required launch behavior is confirmed. When attached to an interactive terminal, a missing task may be prompted for. In a noninteractive process, missing required input is an error rather than a prompt.
+During development, `--model-script <path>` supplies a validated JSON array of fake-model decisions and does not require `AI_API_KEY`. This option is for deterministic testing and is not the official evaluation transport.
+
+`make run` invokes the same entrypoint. When attached to an interactive terminal, a missing task may be prompted for. In a noninteractive process, missing required input is an error rather than a prompt. Until the organizer transport is known, a normal live run exits explicitly rather than guessing a provider protocol.
 
 The input repository is never modified by default. Each run creates an isolated working copy beneath its artifact directory. A successful or partial run preserves that working copy for inspection.
 
