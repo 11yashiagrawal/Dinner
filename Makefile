@@ -1,4 +1,4 @@
-.PHONY: setup runner-image run benchmark test test-docker contract rehearse-clean check
+.PHONY: setup runner-image run benchmark scorecard test test-docker contract rehearse-clean check
 
 setup:
 	bun install --frozen-lockfile
@@ -11,6 +11,9 @@ run:
 
 benchmark:
 	bun run src/benchmark/cli.ts evaluate $(ARGS)
+
+scorecard:
+	bun run scorecard
 
 test:
 	bun test

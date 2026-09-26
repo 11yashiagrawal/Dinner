@@ -64,6 +64,14 @@ Additional controls include `--max-repair-attempts`, `--verification-reserve-ste
 
 The experimental `--repository-map enabled` option adds bounded, ranked source-file and symbol candidates to the initial model context. It remains disabled by default: development-fixture localization improved from 0/6 metadata-only candidates to 6/6 relevant files in the top three, but this surrogate comparison does not establish a solve-rate or token improvement. The comparison and limitations are recorded in `benchmarks/reports/localization-comparison-2026-09-26.json`.
 
+Render the current evaluation scorecard in the terminal:
+
+```bash
+make scorecard
+```
+
+The scorecard keeps autonomous solve metrics separate from evaluator calibration and localization accuracy. Unobserved real-model metrics appear as `N/A` rather than as zero.
+
 If `--output` is omitted, Dinner creates a unique run beneath the operating system's temporary directory. Output must be outside the target repository.
 
 ### Deterministic fake-model runs
