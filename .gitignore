@@ -1,0 +1,6 @@
+node_modules/
+.env
+.harness-runs/
+coverage/
+*.log
+.DS_Store
