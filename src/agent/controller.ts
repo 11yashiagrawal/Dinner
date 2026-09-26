@@ -12,6 +12,7 @@ import { createEvidence, discoverChecks, evidenceForFinalState, type Verificatio
 import { classifyCommandFailure, commandFailureDetail, type FailureKind, type FailureRecord } from "../recovery";
 import { IsolatedWorkspace, type WorkspaceCheckpoint, type WorkspaceState } from "../workspace";
 import { AgentEventWriter } from "./events";
+import { ProgressTracker } from "./progress";
 import {
   emptyUsageSummary,
   recordUsage,
@@ -30,6 +31,8 @@ export interface AutonomousRunOptions {
   maxModelCalls: number;
   maxRepairAttempts?: number;
   maxContextChars?: number;
+  verificationReserveSteps?: number;
+  maxStagnationInterventions?: number;
   apiKey?: string;
 }
 
@@ -196,6 +199,15 @@ export async function runAutonomousTask(
   if (!Number.isInteger(maxRepairAttempts) || maxRepairAttempts <= 0) {
     throw new Error("maxRepairAttempts must be a positive integer.");
   }
+  const verificationReserveSteps =
+    options.verificationReserveSteps ?? Math.min(3, Math.max(0, options.maxSteps - 1));
+  if (!Number.isInteger(verificationReserveSteps) || verificationReserveSteps < 0 || verificationReserveSteps >= options.maxSteps) {
+    throw new Error("verificationReserveSteps must be a non-negative integer smaller than maxSteps.");
+  }
+  const maxStagnationInterventions = options.maxStagnationInterventions ?? 2;
+  if (!Number.isInteger(maxStagnationInterventions) || maxStagnationInterventions <= 0) {
+    throw new Error("maxStagnationInterventions must be a positive integer.");
+  }
   const now = dependencies.now ?? Date.now;
   const startedAt = now();
   const deadline = startedAt + options.maxMinutes * 60_000;
@@ -226,6 +238,7 @@ export async function runAutonomousTask(
     ...(options.maxContextChars === undefined ? {} : { maxContextChars: options.maxContextChars }),
   });
   const readCache = new RepositoryReadCache();
+  const progress = new ProgressTracker();
   const usage = emptyUsageSummary();
   const checkpoints = new Map<string, WorkspaceCheckpoint>();
   const failures: FailureRecord[] = [];
@@ -234,6 +247,10 @@ export async function runAutonomousTask(
   let checkpointsRestored = 0;
   let steps = 0;
   let modelCalls = 0;
+  let commandsRun = 0;
+  let stagnationInterventions = 0;
+  let verificationReserveActivations = 0;
+  let reserveActive = false;
   let verificationCommands = 0;
   let lastVerification: CommandResult | null = null;
   let verifiedPatchSha: string | null = null;
@@ -266,6 +283,17 @@ export async function runAutonomousTask(
             ? "Step budget exhausted."
             : "Model-call budget exhausted.";
       break;
+    }
+    if (!reserveActive && verificationReserveSteps > 0) {
+      const state = await currentState(workspace);
+      if (
+        state.changedFiles.length > 0 &&
+        steps >= options.maxSteps - verificationReserveSteps - 1
+      ) {
+        reserveActive = true;
+        verificationReserveActivations += 1;
+        memory.recordGuidance("Verification reserve is active. Use only verification commands, inspect_diff, or finish. Resolve final evidence before any further exploration or edits.");
+      }
     }
 
     let turn;
@@ -334,6 +362,16 @@ export async function runAutonomousTask(
 
     steps += 1;
     try {
+      const allowedDuringReserve =
+        decision.action.type === "inspect_diff" ||
+        (decision.action.type === "run_command" && decision.action.purpose === "verification");
+      if (reserveActive && !allowedDuringReserve) {
+        steps -= 1;
+        const rejection = { ok: false, error: "Action rejected because the final verification reserve is active." };
+        await events.write("tool_result", { action: decision.action.type, workspaceChanged: false, result: rejection });
+        memory.recordObservation(decision.action, rejection);
+        continue;
+      }
       const observation = await dispatchAction({
         action: decision.action,
         repository,
@@ -348,6 +386,7 @@ export async function runAutonomousTask(
         verifiedPatchSha = null;
         diffReviewedPatchSha = null;
       }
+      if (decision.action.type === "run_command") commandsRun += 1;
       if (decision.action.type === "inspect_diff") {
         diffReviewedPatchSha = (await currentState(workspace)).patchSha256;
       }
@@ -377,6 +416,21 @@ export async function runAutonomousTask(
         workspaceChanged: observation.workspaceChanged,
         result: observation.result,
       });
+      const repetition = progress.observe(
+        decision.action,
+        observation.result,
+        (await currentState(workspace)).patchSha256,
+      );
+      if (repetition >= 2) {
+        stagnationInterventions += 1;
+        memory.recordGuidance("The same action produced the same outcome on unchanged code. Choose a different investigation or hypothesis; do not repeat it without new evidence.");
+        if (stagnationInterventions >= maxStagnationInterventions) {
+          status = "partial";
+          terminationReason = "Stagnation limit reached after repeated unchanged actions.";
+          memory.recordObservation(decision.action, observation.result);
+          break;
+        }
+      }
       if (observation.failure !== undefined) {
         const state = await currentState(workspace);
         const countsAgainstRepairLimit =
@@ -468,6 +522,9 @@ export async function runAutonomousTask(
     metrics: {
       steps,
       modelCalls,
+      commandsRun,
+      stagnationInterventions,
+      verificationReserveActivations,
       durationMs: Math.max(0, now() - startedAt),
     },
     usage,

@@ -118,6 +118,8 @@ async function runWithScript(options: {
   maxSteps?: number;
   maxRepairAttempts?: number;
   maxContextChars?: number;
+  verificationReserveSteps?: number;
+  maxStagnationInterventions?: number;
 }) {
   const parent = await temporaryDirectory("dinner-agent-output-");
   const outputPath = join(parent, "run");
@@ -132,6 +134,8 @@ async function runWithScript(options: {
       maxModelCalls: 10,
       ...(options.maxRepairAttempts === undefined ? {} : { maxRepairAttempts: options.maxRepairAttempts }),
       ...(options.maxContextChars === undefined ? {} : { maxContextChars: options.maxContextChars }),
+      ...(options.verificationReserveSteps === undefined ? {} : { verificationReserveSteps: options.verificationReserveSteps }),
+      ...(options.maxStagnationInterventions === undefined ? {} : { maxStagnationInterventions: options.maxStagnationInterventions }),
     },
     {
       model,
@@ -348,5 +352,57 @@ describe("autonomous agent vertical slice", () => {
     });
     expect(result.memory).toMatchObject({ readCacheHits: 1, readCacheMisses: 2 });
     expect(result.status).toBe("partial");
+  });
+
+  test("terminates repeated unchanged actions at the stagnation limit", async () => {
+    const source = await codingFixture();
+    const { result } = await runWithScript({
+      source,
+      maxStagnationInterventions: 2,
+      script: [
+        turn({ type: "list_files", path: "." }),
+        turn({ type: "list_files", path: "." }),
+        turn({ type: "list_files", path: "." }),
+      ],
+    });
+    expect(result.status).toBe("partial");
+    expect(result.terminationReason).toContain("Stagnation limit");
+    expect(result.metrics.stagnationInterventions).toBe(2);
+  });
+
+  test("does not treat the same read after an edit as stagnation", async () => {
+    const source = await codingFixture();
+    const { result } = await runWithScript({
+      source,
+      script: [
+        turn({ type: "read_file", path: "src/math.ts" }),
+        turn({ type: "apply_patch", patch: FIX_PATCH }),
+        turn({ type: "read_file", path: "src/math.ts" }),
+        turn({ type: "finish", summary: "Different repository states." }),
+      ],
+    });
+    expect(result.metrics.stagnationInterventions).toBe(0);
+  });
+
+  test("rejects exploration inside the final verification reserve without spending an action step", async () => {
+    const source = await codingFixture();
+    const { result, model } = await runWithScript({
+      source,
+      maxSteps: 6,
+      verificationReserveSteps: 2,
+      script: [
+        turn({ type: "apply_patch", patch: FIX_PATCH }),
+        turn({ type: "list_files", path: "src" }),
+        turn({ type: "search", query: "add" }),
+        turn({ type: "read_file", path: "src/math.ts" }),
+        turn({ type: "run_command", command: "bun test", purpose: "verification" }),
+        turn({ type: "inspect_diff" }),
+        turn({ type: "finish", summary: "Used the protected verification capacity." }),
+      ],
+    });
+    expect(result.status).toBe("verified");
+    expect(result.metrics.verificationReserveActivations).toBe(1);
+    expect(result.metrics.steps).toBe(5);
+    expect(model.requests[3]?.messages.at(-1)?.content).toContain("Verification reserve is active");
   });
 });

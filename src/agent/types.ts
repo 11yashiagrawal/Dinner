@@ -55,6 +55,9 @@ export interface AgentRunResult {
   metrics: {
     steps: number;
     modelCalls: number;
+    commandsRun: number;
+    stagnationInterventions: number;
+    verificationReserveActivations: number;
     durationMs: number;
   };
   usage: UsageSummary;

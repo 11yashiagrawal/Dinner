@@ -73,6 +73,14 @@ export class TaskMemory {
     this.compactPairs();
   }
 
+  recordGuidance(detail: string): void {
+    this.pairs.push({
+      assistant: { role: "assistant", content: JSON.stringify({ controllerIntervention: true }) },
+      user: { role: "user", content: clipped(detail, this.limits.maxEntryChars) },
+    });
+    this.compactPairs();
+  }
+
   recordFailure(failure: FailureRecord): void {
     this.failures.push(clipped(failure, 800));
   }

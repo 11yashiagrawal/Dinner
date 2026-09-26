@@ -111,6 +111,15 @@ describe("loadRunConfig", () => {
     ).rejects.toThrow("--max-steps must be a positive integer");
   });
 
+  test("rejects a verification reserve that consumes the whole action budget", async () => {
+    const cwd = await temporaryDirectory();
+    expect(loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it", "--max-steps", "3", "--verification-reserve-steps", "3"],
+      cwd,
+      env: { AI_API_KEY: "secret" },
+    })).rejects.toThrow("must be smaller than --max-steps");
+  });
+
   test("omits the credential from public configuration", async () => {
     const cwd = await temporaryDirectory();
     const config = await loadRunConfig({

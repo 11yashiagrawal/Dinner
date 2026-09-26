@@ -8,6 +8,10 @@ export const DEFAULT_BUDGETS = {
   maxSteps: 40,
   maxMinutes: 20,
   maxModelCalls: 30,
+  maxRepairAttempts: 4,
+  verificationReserveSteps: 3,
+  maxStagnationInterventions: 2,
+  maxContextChars: 48_000,
 } as const;
 
 export interface RunConfig {
@@ -20,6 +24,10 @@ export interface RunConfig {
     maxSteps: number;
     maxMinutes: number;
     maxModelCalls: number;
+    maxRepairAttempts: number;
+    verificationReserveSteps: number;
+    maxStagnationInterventions: number;
+    maxContextChars: number;
   };
 }
 
@@ -42,6 +50,10 @@ interface RunArguments {
   maxSteps?: string;
   maxMinutes?: string;
   maxModelCalls?: string;
+  maxRepairAttempts?: string;
+  verificationReserveSteps?: string;
+  maxStagnationInterventions?: string;
+  maxContextChars?: string;
   modelScript?: string;
 }
 
@@ -61,6 +73,10 @@ const OPTION_NAMES = new Map<string, keyof RunArguments>([
   ["--max-steps", "maxSteps"],
   ["--max-minutes", "maxMinutes"],
   ["--max-model-calls", "maxModelCalls"],
+  ["--max-repair-attempts", "maxRepairAttempts"],
+  ["--verification-reserve-steps", "verificationReserveSteps"],
+  ["--max-stagnation-interventions", "maxStagnationInterventions"],
+  ["--max-context-chars", "maxContextChars"],
   ["--model-script", "modelScript"],
 ]);
 
@@ -102,6 +118,15 @@ function positiveInteger(value: string | undefined, fallback: number, name: stri
   const parsed = positiveNumber(value, fallback, name);
   if (!Number.isInteger(parsed)) {
     throw new ConfigurationError(`${name} must be a positive integer.`);
+  }
+  return parsed;
+}
+
+function nonNegativeInteger(value: string | undefined, fallback: number, name: string): number {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new ConfigurationError(`${name} must be a non-negative integer.`);
   }
   return parsed;
 }
@@ -187,8 +212,15 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
         DEFAULT_BUDGETS.maxModelCalls,
         "--max-model-calls",
       ),
+      maxRepairAttempts: positiveInteger(args.maxRepairAttempts, DEFAULT_BUDGETS.maxRepairAttempts, "--max-repair-attempts"),
+      verificationReserveSteps: nonNegativeInteger(args.verificationReserveSteps, DEFAULT_BUDGETS.verificationReserveSteps, "--verification-reserve-steps"),
+      maxStagnationInterventions: positiveInteger(args.maxStagnationInterventions, DEFAULT_BUDGETS.maxStagnationInterventions, "--max-stagnation-interventions"),
+      maxContextChars: positiveInteger(args.maxContextChars, DEFAULT_BUDGETS.maxContextChars, "--max-context-chars"),
     },
   };
+  if (config.budgets.verificationReserveSteps >= config.budgets.maxSteps) {
+    throw new ConfigurationError("--verification-reserve-steps must be smaller than --max-steps.");
+  }
   if (apiKey !== undefined && apiKey !== "") config.apiKey = apiKey;
   if (args.modelScript !== undefined) config.modelScriptPath = resolve(cwd, args.modelScript);
   return config;

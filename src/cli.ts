@@ -19,6 +19,10 @@ Options:
   --max-steps <integer>      Maximum agent actions (default: 40)
   --max-minutes <number>     Wall-clock limit in minutes (default: 20)
   --max-model-calls <int>    Maximum model calls (default: 30)
+  --max-repair-attempts <n>  Maximum code-related failures (default: 4)
+  --verification-reserve-steps <n>  Steps protected for final checks (default: 3)
+  --max-stagnation-interventions <n> Repeated-action limit (default: 2)
+  --max-context-chars <n>    Approximate request character limit (default: 48000)
   --model-script <path>      Development-only JSON decisions for the fake model
   --help                     Show this help
 `;
@@ -80,6 +84,10 @@ export async function runCli(
       maxSteps: config.budgets.maxSteps,
       maxMinutes: config.budgets.maxMinutes,
       maxModelCalls: config.budgets.maxModelCalls,
+      maxRepairAttempts: config.budgets.maxRepairAttempts,
+      verificationReserveSteps: config.budgets.verificationReserveSteps,
+      maxStagnationInterventions: config.budgets.maxStagnationInterventions,
+      maxContextChars: config.budgets.maxContextChars,
     };
     if (config.apiKey !== undefined) runOptions.apiKey = config.apiKey;
     const result = await runAutonomousTask(runOptions, {
