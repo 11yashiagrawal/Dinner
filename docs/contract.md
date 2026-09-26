@@ -1,6 +1,6 @@
 # Harness execution contract
 
-Status: provisional until the original problem statement and submission guidelines are available.
+Status: aligned with the six-page problem statement supplied on 2026-09-26; evaluator transport and submission details remain provisional until their separate documents are available.
 
 ## Product goal
 
@@ -68,9 +68,11 @@ Docker reduces host exposure but is not presented as a complete security boundar
 | Development model use | Deterministic fake adapter first; live quota pending |
 | Team/time assumption | 24 hours, mainly one developer working with Codex |
 
-## Provisional organizer requirements
+## Confirmed problem-statement requirements
 
-The supplied conversation summary says the repository should expose `make setup`, `make run`, and preferably `make test`; use `AI_API_KEY`; accept a prescribed text model; and require no evaluator code changes. These are treated as provisional rather than official because the original problem and submission documents have not yet been provided.
+The supplied problem statement requires an autonomous coding-agent harness around the same standardized foundation model used by every team. It emphasizes repository navigation, tool use, context and state management, orchestration, failure recovery, verified code changes, and efficient resource use. It explicitly prioritizes correctness, evidence, and efficiency, while leaving the agent architecture to participants.
+
+The problem statement does not identify the provider, model, endpoint, API schema, key format, evaluator invocation, resource limits, or submission contract. Claims derived only from the earlier conversation summary, including `AI_API_KEY` and Make target expectations, therefore remain provisional.
 
 ## Requirements still needing official confirmation
 

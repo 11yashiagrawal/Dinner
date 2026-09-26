@@ -2,7 +2,7 @@
 
 ## Deterministic validation
 
-At revision `d408b28`, the clean-archive rehearsal installs the frozen Bun lockfile and reports 106 passing deterministic tests, five Docker-gated skips, and zero failures. Docker integration still requires a running Docker daemon and is exercised by the separate CI job and `make test-docker`.
+At revision `62e5c9c`, the routine suite reports 110 passing deterministic tests, five Docker-gated skip entries, and zero failures. On Docker Engine 27.4.0, `make test-docker` builds the pinned runner image and passes all three integration cases: isolated command execution without model credentials, failure and process-tree timeout handling, and hidden evaluator execution through a read-only mount. The five routine skip entries include suite hooks; they correspond to these three test cases.
 
 The benchmark contains eight pinned tasks: six development tasks and two held-out tasks. Each broken fixture is independently `unsolved`, and each known-good calibration patch is `solved`. These 16 evaluations validate fixture construction; they do not measure agent capability. Full data and denominator definitions are in [`benchmarks/reports/baseline-2026-09-26.json`](../benchmarks/reports/baseline-2026-09-26.json).
 
@@ -16,7 +16,7 @@ The optional bounded repository map was tested only on six development fixtures.
 
 - Deterministic fake-model runs exercise the complete controller, workspace, patch, verification, recovery, memory, evidence, and artifact path.
 - Independent fixtures exercise TypeScript and Python targets.
-- Commands are designed to run in bounded unprivileged Docker containers, with credentials excluded.
+- Commands run successfully in bounded unprivileged Docker containers, with model credentials excluded from the target environment.
 - Fresh-archive installation and deterministic checks pass with Bun 1.3.14.
 
-The project does not yet claim organizer API compatibility, autonomous benchmark solve rate, large-repository localization performance, or completed local Docker integration on the development machine.
+The project does not yet claim organizer API compatibility, autonomous benchmark solve rate, or large-repository localization performance.

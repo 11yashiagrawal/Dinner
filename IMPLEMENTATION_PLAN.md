@@ -8,7 +8,7 @@ Build a terminal coding agent that accepts a repository and an issue, edits an i
 
 Default stack: TypeScript on Bun 1.3.x, strict compiler settings, `bun:test`, a thin adapter for the organizer-provided model, JSONL event logs, and a plain autonomous CLI. Target-repository commands run inside disposable Linux containers with network access throughout the task. Model credentials remain in the host harness process and are never forwarded to target containers.
 
-The original problem statement and submission guidelines must confirm: model and API protocol, input/output format, repository provisioning, network and container availability, time/token limits, required commands, allowed dependencies, and submission deliverables. The supplied conversation mentions AI_API_KEY and make setup/run/test; treat these as provisional until checked against original documents.
+The supplied problem statement confirms the autonomous harness goal and its focus on correctness, evidence, efficiency, orchestration, context, tools, verification, and recovery. It does not define the model/API protocol, evaluator input/output format, repository provisioning, resource limits, required commands, allowed dependencies, or submission deliverables. The conversation mentions AI_API_KEY and make setup/run/test; treat these as provisional until checked against the remaining official documents.
 
 No model switching, extra agent architecture, vector database, web IDE, automatic publishing, or GitHub issue integration is required for the initial version.
 
