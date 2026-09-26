@@ -62,13 +62,30 @@ Inspect before editing. Prefer list_files, search, and read_file over shell comm
 Label commands as setup, agent, or verification. Before finish, inspect the diff and run a relevant verification command after the final edit.
 Never claim a check passed unless its observed tool result says it passed. Do not remove assertions, disable tests, or modify evaluator inputs to manufacture success.`;
 
-const MAX_UNCHANGED_EXPLORATION_STEPS = 8;
+const MAX_UNCHANGED_EXPLORATION_STEPS = 6;
+const MAX_UNCHANGED_SHELL_FILE_READS = 2;
 
 function isExplorationAction(action: Exclude<ModelAction, { type: "finish" }>): boolean {
   return action.type === "list_files" ||
     action.type === "search" ||
     action.type === "read_file" ||
     (action.type === "run_command" && action.purpose !== "verification");
+}
+
+function looksLikeShellFileRead(action: Exclude<ModelAction, { type: "finish" }>): boolean {
+  if (action.type !== "run_command" || action.purpose === "verification") return false;
+  return /\b(cat|sed|awk|nl|head|tail|less|more)\b/.test(action.command) &&
+    /\.(jsx?|tsx?|py|md|json|css|scss|html|yml|yaml|toml|txt)\b/.test(action.command);
+}
+
+function explorationRejection(action: Exclude<ModelAction, { type: "finish" }>, unchangedExplorationSteps: number): string | null {
+  if (unchangedExplorationSteps >= MAX_UNCHANGED_EXPLORATION_STEPS && isExplorationAction(action)) {
+    return "Action rejected because the unchanged-code exploration limit was reached. Apply a patch, replace a file, or finish with the evidence already collected.";
+  }
+  if (unchangedExplorationSteps >= MAX_UNCHANGED_SHELL_FILE_READS && looksLikeShellFileRead(action)) {
+    return "Action rejected because shell file-printing is wasting the edit budget after prior inspection. Use read_file for bounded inspection only if the file changed; otherwise apply_patch or replace_file now.";
+  }
+  return null;
 }
 
 async function currentState(workspace: IsolatedWorkspace): Promise<WorkspaceState> {
@@ -384,15 +401,13 @@ export async function runAutonomousTask(
 
     steps += 1;
     try {
-      if (
-        unchangedExplorationSteps >= MAX_UNCHANGED_EXPLORATION_STEPS &&
-        isExplorationAction(decision.action)
-      ) {
+      const explorationError = explorationRejection(decision.action, unchangedExplorationSteps);
+      if (explorationError !== null) {
         steps -= 1;
         stagnationInterventions += 1;
         const rejection = {
           ok: false,
-          error: "Action rejected because the unchanged-code exploration limit was reached. Apply a patch, replace a file, or finish with the evidence already collected.",
+          error: explorationError,
         };
         await events.write("tool_result", {
           action: decision.action.type,
@@ -400,7 +415,7 @@ export async function runAutonomousTask(
           result: rejection,
         });
         memory.recordObservation(decision.action, rejection);
-        memory.recordGuidance("The inspection budget for unchanged code is exhausted. The next action must apply_patch, replace_file, or finish; do not perform more reads, searches, listings, or non-verification shell commands.");
+        memory.recordGuidance("The inspection budget for unchanged code is exhausted. The next action must be apply_patch, replace_file, or finish. If you have read the target file, prefer replace_file with the complete corrected file text rather than more shell reads.");
         if (stagnationInterventions >= maxStagnationInterventions) {
           status = "partial";
           terminationReason = "Stagnation limit reached after repeated exploration without code changes.";
@@ -600,7 +615,7 @@ export function createAgentEventRenderer(
 ): (event: AgentEvent) => void {
   const color = options.color ?? true;
   const paint = (code: number, text: string) => color ? `\u001b[${code}m${text}\u001b[0m` : text;
-  const pretty = (value: unknown) => JSON.stringify(value, null, 2);
+  const pretty = (value: unknown) => JSON.stringify(compactForTerminal(value), null, 2);
   const heading = (event: AgentEvent, marker: string, label: string) =>
     `[${String(event.sequence).padStart(3, "0")}] ${marker} ${label}`;
   return (event) => {
@@ -625,6 +640,46 @@ export function createAgentEventRenderer(
       write(`${paint(code, heading(event, "■", `RUN FINISHED: ${String(payload.status)}`))}\n${pretty(payload)}`);
     }
   };
+}
+
+function compactText(value: string, maxChars: number): string {
+  return value.length <= maxChars ? value : `${value.slice(0, maxChars)}…[truncated ${value.length - maxChars} chars]`;
+}
+
+function compactForTerminal(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(compactForTerminal);
+  if (typeof value !== "object" || value === null) return value;
+  const record = value as Record<string, unknown>;
+  if (
+    record.ok === true &&
+    typeof record.value === "object" &&
+    record.value !== null &&
+    typeof (record.value as { content?: unknown }).content === "string"
+  ) {
+    const read = record.value as Record<string, unknown>;
+    const content = read.content as string;
+    return {
+      ...record,
+      value: {
+        ...read,
+        content: compactText(content, 900),
+        contentChars: content.length,
+      },
+    };
+  }
+  if (
+    typeof record.preview === "string" &&
+    typeof record.capturedBytes === "number"
+  ) {
+    return {
+      ...record,
+      preview: compactText(record.preview, 900),
+      previewChars: record.preview.length,
+    };
+  }
+  return Object.fromEntries(
+    Object.entries(record).map(([key, nested]) => [key, compactForTerminal(nested)]),
+  );
 }
 
 export function renderAgentEvent(event: AgentEvent): void {

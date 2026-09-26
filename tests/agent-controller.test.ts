@@ -427,7 +427,7 @@ describe("autonomous agent vertical slice", () => {
       maxSteps: 20,
       maxStagnationInterventions: 2,
       script: [
-        ...Array.from({ length: 8 }, (_, index) =>
+        ...Array.from({ length: 6 }, (_, index) =>
           turn({ type: "list_files" as const, path: ".", maxDepth: index + 1 })),
         turn({ type: "search", query: "add" }),
         turn({ type: "read_file", path: "src/math.ts" }),
@@ -437,12 +437,35 @@ describe("autonomous agent vertical slice", () => {
     expect(result.status).toBe("partial");
     expect(result.terminationReason).toContain("exploration without code changes");
     expect(result.metrics).toMatchObject({
-      steps: 8,
-      modelCalls: 10,
+      steps: 6,
+      modelCalls: 8,
       stagnationInterventions: 2,
     });
-    expect(model.requests[8]?.messages.map((message) => message.content).join("\n")).toContain(
+    expect(model.requests[6]?.messages.map((message) => message.content).join("\n")).toContain(
       "exploration budget is exhausted",
+    );
+  });
+
+  test("blocks shell file-printing after prior unchanged inspection", async () => {
+    const source = await codingFixture();
+    const { result, model } = await runWithScript({
+      source,
+      maxStagnationInterventions: 2,
+      script: [
+        turn({ type: "read_file", path: "src/math.ts" }),
+        turn({ type: "search", query: "add" }),
+        turn({ type: "run_command", command: "sed -n '1,80p' src/math.ts" }),
+        turn({ type: "replace_file", path: "src/math.ts", content: "export function add(a: number, b: number): number {\n  return a + b;\n}\n" }),
+        turn({ type: "run_command", command: "bun test", purpose: "verification" }),
+        turn({ type: "inspect_diff" }),
+        turn({ type: "finish", summary: "Replaced stale implementation and verified." }),
+      ],
+    });
+
+    expect(result.status).toBe("verified");
+    expect(result.metrics.stagnationInterventions).toBe(1);
+    expect(model.requests[3]?.messages.map((message) => message.content).join("\n")).toContain(
+      "shell file-printing is wasting the edit budget",
     );
   });
 

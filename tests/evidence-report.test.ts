@@ -34,4 +34,34 @@ describe("evidence report", () => {
     expect(output.join("\n")).toContain("[002] ■ RUN FINISHED: partial");
     expect(output.join("\n")).not.toContain("\u001b[");
   });
+
+  test("terminal rendering compacts large read results", () => {
+    const output: string[] = [];
+    const render = createAgentEventRenderer((message) => output.push(message), { color: false });
+    render({
+      sequence: 1,
+      timestamp: "now",
+      type: "tool_result",
+      payload: {
+        action: "read_file",
+        workspaceChanged: false,
+        result: {
+          ok: true,
+          value: {
+            path: "src/big.ts",
+            content: "x".repeat(5_000),
+            startLine: 1,
+            endLine: 200,
+            totalLines: 200,
+            truncated: false,
+          },
+        },
+      },
+    });
+
+    const rendered = output.join("\n");
+    expect(rendered).toContain("contentChars");
+    expect(rendered).toContain("[truncated");
+    expect(rendered).not.toContain("x".repeat(2_000));
+  });
 });
