@@ -22,7 +22,7 @@ export interface RunConfig {
   task: string;
   outputPath: string;
   apiKey?: string;
-  provider: "openrouter" | "deepseek";
+  provider: "openrouter" | "deepseek" | "qwen";
   model: string;
   reasoningEffort?: DeepSeekReasoningEffort;
   modelScriptPath?: string;
@@ -170,8 +170,8 @@ function validateRepository(repo: string | undefined, cwd: string): string {
 function validateProvider(value: string | undefined, source: "--provider" | "MODEL_PROVIDER"): RunConfig["provider"] | undefined {
   if (value === undefined || value.trim() === "") return undefined;
   const provider = value.trim();
-  if (provider === "openrouter" || provider === "deepseek") return provider;
-  throw new ConfigurationError(`${source} must be openrouter or deepseek.`);
+  if (provider === "openrouter" || provider === "deepseek" || provider === "qwen") return provider;
+  throw new ConfigurationError(`${source} must be openrouter, deepseek, or qwen.`);
 }
 
 function resolveProvider(args: RunArguments, env: Record<string, string | undefined>): RunConfig["provider"] {
@@ -181,9 +181,9 @@ function resolveProvider(args: RunArguments, env: Record<string, string | undefi
   const envProvider = validateProvider(env.MODEL_PROVIDER, "MODEL_PROVIDER");
   if (envProvider !== undefined) return envProvider;
 
-  return !env.AI_API_KEY?.trim() && Boolean(env.DEEPSEEK_API_KEY?.trim())
-    ? "deepseek"
-    : "openrouter";
+  if (!env.AI_API_KEY?.trim() && env.DEEPSEEK_API_KEY?.trim()) return "deepseek";
+  if (!env.AI_API_KEY?.trim() && !env.DEEPSEEK_API_KEY?.trim() && env.QWEN_API_KEY?.trim()) return "qwen";
+  return "openrouter";
 }
 
 function validateReasoningEffort(value: string | undefined): DeepSeekReasoningEffort | undefined {
@@ -241,7 +241,11 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
   const provider = resolveProvider(args, env);
   const reasoningEffort = validateReasoningEffort(args.reasoningEffort ?? env.DEEPSEEK_REASONING_EFFORT) ??
     (provider === "deepseek" ? "medium" : undefined);
-  const credentialName = provider === "deepseek" ? "DEEPSEEK_API_KEY" : "AI_API_KEY";
+  const credentialName = provider === "deepseek"
+    ? "DEEPSEEK_API_KEY"
+    : provider === "qwen"
+      ? "QWEN_API_KEY"
+      : "AI_API_KEY";
   const apiKey = env[credentialName]?.trim();
 
   if ((apiKey === undefined || apiKey === "") && args.modelScript === undefined) {
@@ -268,7 +272,9 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
     ),
     model: args.model?.trim() || (provider === "deepseek"
       ? env.DEEPSEEK_MODEL?.trim() || "deepseek-flash"
-      : env.OPENROUTER_MODEL?.trim() || "openai/gpt-5.2"),
+      : provider === "qwen"
+        ? env.QWEN_MODEL?.trim() || "qwen-plus"
+        : env.OPENROUTER_MODEL?.trim() || "openai/gpt-5.2"),
     repositoryMapEnabled: args.repositoryMap === undefined || args.repositoryMap === "disabled"
       ? false
       : args.repositoryMap === "enabled"

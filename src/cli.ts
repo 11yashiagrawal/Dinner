@@ -3,13 +3,14 @@
 import { readFile } from "node:fs/promises";
 import { ConfigurationError, loadRunConfig, toPublicRunConfig } from "./config";
 import { createAgentEventRenderer, loadFakeModelScript, runAutonomousTask } from "./agent";
-import { createDeepSeekModel, createOpenRouterModel } from "./model";
+import { createDeepSeekModel, createOpenRouterModel, createQwenModel } from "./model";
 import { fetchGitHubIssueTask, type IssueFetcher } from "./issue";
 import {
   collectInteractiveRunArguments,
   InteractiveRunCancelled,
   type TerminalPrompt,
 } from "./interactive";
+import { createTuiEventRenderer, renderRunSummary } from "./tui";
 
 export const HELP = `Dinner — autonomous coding harness
 
@@ -21,6 +22,7 @@ Usage:
 Required environment:
   AI_API_KEY                 OpenRouter API key for live development runs
   DEEPSEEK_API_KEY           DeepSeek API key for direct DeepSeek runs
+  QWEN_API_KEY               Qwen DashScope-compatible API key for direct Qwen runs
 
 Options:
   --repo <path>              Target Git repository
@@ -38,7 +40,7 @@ Options:
   --repository-map <enabled|disabled>  Add ranked source map to initial context (default: disabled)
   --color <enabled|disabled>  Terminal color; NO_COLOR disables by default
   --model-script <path>      Development-only JSON decisions for the fake model
-  --provider <name>          openrouter or deepseek (default: inferred from credentials)
+  --provider <name>          openrouter, deepseek, or qwen (default: inferred from credentials)
   --model <id>               Provider model (DeepSeek default: deepseek-flash)
   --reasoning-effort <level> DeepSeek reasoning effort: low, medium, high (default: medium)
   --help                     Show this help
@@ -150,7 +152,9 @@ export async function runCli(
             model: config.model,
             ...(config.reasoningEffort === undefined ? {} : { reasoningEffort: config.reasoningEffort }),
           })
-        : createOpenRouterModel({ apiKey: config.apiKey!, model: config.model })
+        : config.provider === "qwen"
+          ? createQwenModel({ apiKey: config.apiKey!, model: config.model })
+          : createOpenRouterModel({ apiKey: config.apiKey!, model: config.model })
       : await loadFakeModelScript(config.modelScriptPath);
     const runOptions: Parameters<typeof runAutonomousTask>[0] = {
       repoPath: config.repoPath,
@@ -168,9 +172,11 @@ export async function runCli(
     if (config.apiKey !== undefined) runOptions.apiKey = config.apiKey;
     const result = await runAutonomousTask(runOptions, {
       model,
-      onEvent: createAgentEventRenderer(stdout, { color: config.colorEnabled }),
+      onEvent: interactive
+        ? createTuiEventRenderer(stdout, { color: config.colorEnabled })
+        : createAgentEventRenderer(stdout, { color: config.colorEnabled }),
     });
-    stdout(JSON.stringify(result, null, 2));
+    stdout(interactive ? renderRunSummary(result, { color: config.colorEnabled }) : JSON.stringify(result, null, 2));
     await maybeOfferPatchApplication({
       interactive,
       ask,

@@ -209,6 +209,32 @@ describe("loadRunConfig", () => {
     expect(config.model).toBe("deepseek-flash");
   });
 
+
+  test("selects Qwen credentials and model", async () => {
+    const cwd = await temporaryDirectory();
+    const config = await loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it", "--provider", "qwen"],
+      cwd,
+      env: { QWEN_API_KEY: "qwen-secret", QWEN_MODEL: "qwen-max" },
+    });
+
+    expect(config.provider).toBe("qwen");
+    expect(config.model).toBe("qwen-max");
+    expect(config.apiKey).toBe("qwen-secret");
+  });
+
+  test("infers Qwen when it is the only configured credential", async () => {
+    const cwd = await temporaryDirectory();
+    const config = await loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it"],
+      cwd,
+      env: { QWEN_API_KEY: "qwen-secret" },
+    });
+
+    expect(config.provider).toBe("qwen");
+    expect(config.model).toBe("qwen-plus");
+  });
+
   test("honors MODEL_PROVIDER before credential inference", async () => {
     const cwd = await temporaryDirectory();
     expect(loadRunConfig({
@@ -225,13 +251,13 @@ describe("loadRunConfig", () => {
       argv: ["--repo", ".", "--task", "Fix it", "--provider", "made-up"],
       cwd,
       env: { AI_API_KEY: "secret" },
-    })).rejects.toThrow("--provider must be openrouter or deepseek");
+    })).rejects.toThrow("--provider must be openrouter, deepseek, or qwen");
 
     expect(loadRunConfig({
       argv: ["--repo", ".", "--task", "Fix it"],
       cwd,
       env: { MODEL_PROVIDER: "made-up", AI_API_KEY: "secret" },
-    })).rejects.toThrow("MODEL_PROVIDER must be openrouter or deepseek");
+    })).rejects.toThrow("MODEL_PROVIDER must be openrouter, deepseek, or qwen");
   });
 
   test("requires the credential belonging to the selected provider", async () => {
@@ -241,6 +267,11 @@ describe("loadRunConfig", () => {
       cwd,
       env: { AI_API_KEY: "openrouter-only" },
     })).rejects.toThrow("DEEPSEEK_API_KEY is required");
+    expect(loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it", "--provider", "qwen"],
+      cwd,
+      env: { AI_API_KEY: "openrouter-only" },
+    })).rejects.toThrow("QWEN_API_KEY is required");
   });
 
   test("honors NO_COLOR and an explicit color override", async () => {

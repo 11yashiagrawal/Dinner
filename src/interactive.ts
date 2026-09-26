@@ -1,6 +1,15 @@
 import { DEFAULT_BUDGETS } from "./config";
+import { normalizeIssueUrl } from "./issue";
+import { box, renderSplash } from "./tui";
 
 export type TerminalPrompt = (question: string, defaultValue?: string) => string | null;
+
+const PROVIDER_MODELS = {
+  deepseek: ["deepseek-flash", "deepseek-chat", "deepseek-reasoner"],
+  qwen: ["qwen-plus", "qwen-max", "qwen-turbo"],
+} as const;
+
+type InteractiveProvider = keyof typeof PROVIDER_MODELS;
 
 export class InteractiveRunCancelled extends Error {
   constructor() {
@@ -22,6 +31,27 @@ function answer(
   return resolved;
 }
 
+function providerCredential(provider: InteractiveProvider): "DEEPSEEK_API_KEY" | "QWEN_API_KEY" {
+  return provider === "deepseek" ? "DEEPSEEK_API_KEY" : "QWEN_API_KEY";
+}
+
+function defaultProvider(env: Record<string, string | undefined>): InteractiveProvider {
+  if (env.DEEPSEEK_API_KEY?.trim()) return "deepseek";
+  if (env.QWEN_API_KEY?.trim()) return "qwen";
+  return "deepseek";
+}
+
+function parseProvider(input: string): InteractiveProvider {
+  return input.trim().toLowerCase() === "qwen" ? "qwen" : "deepseek";
+}
+
+function resolveModel(provider: InteractiveProvider, answerValue: string): string {
+  const models = PROVIDER_MODELS[provider];
+  const index = Number(answerValue);
+  if (Number.isInteger(index) && index >= 1 && index <= models.length) return models[index - 1] ?? models[0];
+  return answerValue.trim() || models[0];
+}
+
 export function collectInteractiveRunArguments(options: {
   ask: TerminalPrompt;
   write?: (message: string) => void;
@@ -30,41 +60,42 @@ export function collectInteractiveRunArguments(options: {
 }): string[] {
   const write = options.write ?? console.log;
   const env = options.env ?? process.env;
+  const color = env.NO_COLOR === undefined;
 
-  write("\nDinner interactive run");
-  write("Enter each value in order. Press Return to accept a value shown in [brackets].");
-  write("For a GitHub issue, paste its URL. For a task file, enter @ followed by its path.\n");
+  write(renderSplash({ color }));
+  answer(options.ask, "Continue", "Enter");
 
-  const repo = answer(options.ask, "1/9 Repository path", undefined, true);
-  const taskInput = answer(options.ask, "2/9 GitHub issue URL, task, or @task-file", undefined, true);
-  const defaultProvider = env.DEEPSEEK_API_KEY?.trim() ? "deepseek" : "openrouter";
-  const provider = answer(options.ask, "3/9 Model provider (deepseek/openrouter)", defaultProvider);
-  const model = answer(
-    options.ask,
-    "4/9 Model",
-    provider === "deepseek"
-      ? env.DEEPSEEK_MODEL?.trim() || "deepseek-flash"
-      : env.OPENROUTER_MODEL?.trim() || "openai/gpt-5.2",
-  );
-  const repositoryMap = answer(options.ask, "5/9 Repository map (enabled/disabled)", "enabled");
-  const maxSteps = answer(options.ask, "6/9 Maximum tool steps", String(DEFAULT_BUDGETS.maxSteps));
-  const maxModelCalls = answer(
-    options.ask,
-    "7/9 Maximum model calls",
-    String(DEFAULT_BUDGETS.maxModelCalls),
-  );
-  const maxMinutes = answer(
-    options.ask,
-    "8/9 Maximum minutes",
-    String(DEFAULT_BUDGETS.maxMinutes),
-  );
-  const output = answer(options.ask, "9/9 Output directory (blank = automatic)");
+  write(box("Setup", [
+    "Choose provider, model, repository, and GitHub issue.",
+    "API keys stay in this terminal process and are never printed.",
+    "Providers: DeepSeek and Qwen.",
+  ], { color }));
 
-  const taskArguments = taskInput.startsWith("@")
-    ? ["--task-file", taskInput.slice(1)]
-    : /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/\d+/.test(taskInput)
-      ? ["--issue", taskInput]
-    : ["--task", taskInput];
+  const repo = answer(options.ask, "Repository path", options.cwd, true);
+  const provider = parseProvider(answer(options.ask, "Provider (deepseek/qwen)", defaultProvider(env)));
+  const models = PROVIDER_MODELS[provider];
+  write(box("Models", models.map((model, index) => `${index + 1}. ${model}`), { color }));
+  const model = resolveModel(provider, answer(options.ask, "Model number or model id", models[0]));
+
+  const credentialName = providerCredential(provider);
+  if (!env[credentialName]?.trim()) {
+    const key = answer(options.ask, credentialName, undefined, true);
+    env[credentialName] = key;
+  }
+
+  const taskInput = answer(options.ask, "GitHub issue URL", undefined, true);
+  const normalizedTaskInput = normalizeIssueUrl(taskInput);
+  const repositoryMap = answer(options.ask, "Repository map (enabled/disabled)", "enabled");
+  const maxSteps = answer(options.ask, "Maximum tool steps", String(DEFAULT_BUDGETS.maxSteps));
+  const maxModelCalls = answer(options.ask, "Maximum model calls", String(DEFAULT_BUDGETS.maxModelCalls));
+  const maxMinutes = answer(options.ask, "Maximum minutes", String(DEFAULT_BUDGETS.maxMinutes));
+  const output = answer(options.ask, "Output directory (blank = automatic)");
+
+  const taskArguments = normalizedTaskInput.startsWith("@")
+    ? ["--task-file", normalizedTaskInput.slice(1)]
+    : /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/\d+/.test(normalizedTaskInput)
+      ? ["--issue", normalizedTaskInput]
+      : ["--task", normalizedTaskInput];
   const argv = [
     "--repo", repo,
     ...taskArguments,
@@ -74,19 +105,20 @@ export function collectInteractiveRunArguments(options: {
     "--max-steps", maxSteps,
     "--max-model-calls", maxModelCalls,
     "--max-minutes", maxMinutes,
+    ...(provider === "deepseek" ? ["--reasoning-effort", "high"] : []),
     ...(output === "" ? [] : ["--output", output]),
   ];
 
-  write("\nRun configuration");
-  write(`  Repository:     ${repo}`);
-  write(`  Task input:     ${taskInput}`);
-  write(`  Provider:       ${provider}`);
-  write(`  Model:          ${model}`);
-  write(`  Repository map: ${repositoryMap}`);
-  write(`  Limits:         ${maxSteps} steps, ${maxModelCalls} model calls, ${maxMinutes} minutes`);
-  write(`  Output:         ${output || "automatic temporary directory"}`);
-  const credentialName = provider === "deepseek" ? "DEEPSEEK_API_KEY" : "AI_API_KEY";
-  write(`  API key:        ${env[credentialName]?.trim() ? `loaded from ${credentialName}` : `missing ${credentialName}`}`);
+  write(box("Ready", [
+    `Repository: ${repo}`,
+    `Issue: ${normalizedTaskInput}`,
+    `Provider: ${provider}`,
+    `Model: ${model}`,
+    `Repository map: ${repositoryMap}`,
+    `Limits: ${maxSteps} steps, ${maxModelCalls} model calls, ${maxMinutes} minutes`,
+    `Output: ${output || "automatic temporary directory"}`,
+    `API key: loaded from ${credentialName}`,
+  ], { color }));
 
   const confirmation = answer(options.ask, "Start run? (Y/n)", "Y").toLowerCase();
   if (confirmation !== "y" && confirmation !== "yes") throw new InteractiveRunCancelled();

@@ -5,10 +5,11 @@ import {
 } from "../src/interactive";
 
 describe("interactive run wizard", () => {
-  test("collects a complete stepwise configuration with defaults", () => {
-    const answers = ["/repo", "@/tmp/issue.md", "", "", "", "", "25", "10", "/tmp/run", ""];
+  test("collects a complete TUI setup with defaults", () => {
+    const answers = ["", "/repo", "", "", "https://github.com/o/r/issues/12", "", "25", "10", "", "/tmp/run", ""];
     const output: string[] = [];
     const questions: Array<[string, string | undefined]> = [];
+    const env: Record<string, string | undefined> = { DEEPSEEK_API_KEY: "secret" };
     const argv = collectInteractiveRunArguments({
       ask: (question, defaultValue) => {
         questions.push([question, defaultValue]);
@@ -16,44 +17,53 @@ describe("interactive run wizard", () => {
       },
       write: (message) => output.push(message),
       cwd: "/cwd",
-      env: { AI_API_KEY: "secret", OPENROUTER_MODEL: "example/model" },
+      env,
     });
 
     expect(argv).toEqual([
       "--repo", "/repo",
-      "--task-file", "/tmp/issue.md",
-      "--provider", "openrouter",
-      "--model", "example/model",
+      "--issue", "https://github.com/o/r/issues/12",
+      "--provider", "deepseek",
+      "--model", "deepseek-flash",
       "--repository-map", "enabled",
-      "--max-steps", "32",
-      "--max-model-calls", "25",
-      "--max-minutes", "10",
+      "--max-steps", "25",
+      "--max-model-calls", "10",
+      "--max-minutes", "20",
+      "--reasoning-effort", "high",
       "--output", "/tmp/run",
     ]);
-    expect(output.join("\n")).toContain("API key:        loaded");
+    expect(output.join("\n")).toContain("Caramel AI Coding Harness");
+    expect(output.join("\n")).toContain("Providers: DeepSeek and Qwen");
+    expect(output.join("\n")).toContain("API key: loaded from DEEPSEEK_API_KEY");
     expect(output.join("\n")).not.toContain("secret");
-    expect(questions[0]).toEqual(["1/9 Repository path", undefined]);
-    expect(questions[1]).toEqual(["2/9 GitHub issue URL, task, or @task-file", undefined]);
+    expect(questions[0]).toEqual(["Continue", "Enter"]);
+    expect(questions[2]).toEqual(["Provider (deepseek/qwen)", "deepseek"]);
   });
 
-  test("treats GitHub issue URLs as issue inputs", () => {
-    const answers = ["/repo", "https://github.com/o/r/issues/12", "", "", "", "", "", "", "", ""];
+  test("accepts Qwen setup and prompts for a missing key", () => {
+    const answers = ["", "/repo", "qwen", "2", "qwen-secret", "[issue](https://github.com/o/r/issues/560)", "", "", "", "", ""];
+    const env: Record<string, string | undefined> = {};
     const argv = collectInteractiveRunArguments({
       ask: () => answers.shift() ?? null,
+      write: () => {},
       cwd: "/cwd",
-      env: { AI_API_KEY: "secret" },
+      env,
     });
 
-    expect(argv).toContain("--issue");
-    expect(argv).toContain("https://github.com/o/r/issues/12");
+    expect(argv).toContain("--provider");
+    expect(argv).toContain("qwen");
+    expect(argv).toContain("qwen-max");
+    expect(argv).toContain("https://github.com/o/r/issues/560");
+    expect(env.QWEN_API_KEY).toBe("qwen-secret");
   });
 
   test("can be cancelled before execution", () => {
-    const answers = ["/repo", "Fix it", "", "", "", "", "", "", "", "n"];
+    const answers = ["", "/repo", "", "", "https://github.com/o/r/issues/12", "", "", "", "", "", "n"];
     expect(() => collectInteractiveRunArguments({
       ask: () => answers.shift() ?? null,
+      write: () => {},
       cwd: "/cwd",
-      env: { AI_API_KEY: "secret" },
+      env: { DEEPSEEK_API_KEY: "secret" },
     })).toThrow(InteractiveRunCancelled);
   });
 });
