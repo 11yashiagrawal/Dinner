@@ -29,7 +29,9 @@ describe("evidence report", () => {
     const render = createAgentEventRenderer((message) => output.push(message), { color: false });
     render({ sequence: 1, timestamp: "now", type: "model_decision", payload: { intent: "inspect math", action: { type: "read_file" } } });
     render({ sequence: 2, timestamp: "now", type: "run_finished", payload: { status: "partial" } });
-    expect(output).toEqual(["→ read_file — inspect math", "■ partial"]);
+    expect(output.join("\n")).toContain("[001] ◆ MODEL → read_file");
+    expect(output.join("\n")).toContain('\"intent\": \"inspect math\"');
+    expect(output.join("\n")).toContain("[002] ■ RUN FINISHED: partial");
     expect(output.join("\n")).not.toContain("\u001b[");
   });
 });

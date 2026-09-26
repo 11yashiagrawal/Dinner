@@ -3,11 +3,17 @@
 import { ConfigurationError, loadRunConfig, toPublicRunConfig } from "./config";
 import { createAgentEventRenderer, loadFakeModelScript, runAutonomousTask } from "./agent";
 import { createOpenRouterModel } from "./model";
+import {
+  collectInteractiveRunArguments,
+  InteractiveRunCancelled,
+  type TerminalPrompt,
+} from "./interactive";
 
 export const HELP = `Dinner — autonomous coding harness
 
 Usage:
   bun run src/cli.ts run --repo <path> (--task <text> | --task-file <path>) [options]
+  bun run src/cli.ts run                    Start the guided terminal wizard
 
 Required environment:
   AI_API_KEY                 OpenRouter API key for live development runs
@@ -38,6 +44,7 @@ export async function runCli(
     cwd?: string;
     interactive?: boolean;
     promptForTask?: () => string | null;
+    prompt?: TerminalPrompt;
     stdout?: (message: string) => void;
     stderr?: (message: string) => void;
   } = {},
@@ -50,21 +57,32 @@ export async function runCli(
     return 0;
   }
 
-  const [command, ...commandArgs] = argv;
+  const [command, ...suppliedCommandArgs] = argv;
   if (command !== "run") {
     stderr(`Unknown command: ${command}\n\n${HELP}`);
     return 2;
   }
 
-  if (commandArgs.includes("--help") || commandArgs.includes("-h")) {
+  if (suppliedCommandArgs.includes("--help") || suppliedCommandArgs.includes("-h")) {
     stdout(HELP);
     return 0;
   }
 
   try {
+    const interactive = dependencies.interactive ?? Boolean(process.stdin.isTTY);
+    const ask = dependencies.prompt ?? ((question, defaultValue) =>
+      defaultValue === undefined ? prompt(question) : prompt(question, defaultValue));
+    const commandArgs = interactive && suppliedCommandArgs.length === 0
+      ? collectInteractiveRunArguments({
+          ask,
+          write: stdout,
+          cwd: dependencies.cwd ?? process.cwd(),
+          env: dependencies.env ?? process.env,
+        })
+      : suppliedCommandArgs;
     const configOptions: Parameters<typeof loadRunConfig>[0] = {
       argv: commandArgs,
-      interactive: dependencies.interactive ?? Boolean(process.stdin.isTTY),
+      interactive,
       promptForTask: dependencies.promptForTask ?? (() => prompt("Task: ")),
     };
     if (dependencies.env !== undefined) configOptions.env = dependencies.env;
@@ -101,6 +119,10 @@ export async function runCli(
     if (result.status === "budget_exhausted") return 5;
     return 1;
   } catch (error) {
+    if (error instanceof InteractiveRunCancelled) {
+      stdout("Run cancelled.");
+      return 0;
+    }
     if (error instanceof ConfigurationError) {
       stderr(`Configuration error: ${error.message}`);
       return 2;

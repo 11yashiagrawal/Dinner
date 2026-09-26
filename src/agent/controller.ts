@@ -594,18 +594,30 @@ export function createAgentEventRenderer(
 ): (event: AgentEvent) => void {
   const color = options.color ?? true;
   const paint = (code: number, text: string) => color ? `\u001b[${code}m${text}\u001b[0m` : text;
+  const pretty = (value: unknown) => JSON.stringify(value, null, 2);
+  const heading = (event: AgentEvent, marker: string, label: string) =>
+    `[${String(event.sequence).padStart(3, "0")}] ${marker} ${label}`;
   return (event) => {
-  if (event.type === "run_started") write(paint(36, `▶ Run ${String((event.payload as { runId?: unknown }).runId)}`));
-  if (event.type === "model_decision") {
-    const payload = event.payload as { action?: { type?: unknown }; intent?: unknown };
-    const rationale = typeof payload.intent === "string" ? ` — ${payload.intent}` : "";
-    write(`→ ${String(payload.action?.type)}${rationale}`);
-  }
-  if (event.type === "model_error") write(paint(31, "! Model response error"));
-  if (event.type === "tool_result") write("  Tool result recorded");
-  if (event.type === "run_finished") {
-    write(paint(32, `■ ${String((event.payload as { status?: unknown }).status)}`));
-  }
+    if (event.type === "run_started") {
+      write(`${paint(36, heading(event, "▶", "RUN STARTED"))}\n${pretty(event.payload)}`);
+    }
+    if (event.type === "model_decision") {
+      const payload = event.payload as { action?: { type?: unknown }; intent?: unknown };
+      write(`${paint(35, heading(event, "◆", `MODEL → ${String(payload.action?.type)}`))}\n${pretty(payload)}`);
+    }
+    if (event.type === "model_error") {
+      write(`${paint(31, heading(event, "!", "MODEL ERROR"))}\n${pretty(event.payload)}`);
+    }
+    if (event.type === "tool_result") {
+      const payload = event.payload as { action?: unknown; workspaceChanged?: unknown };
+      const changed = payload.workspaceChanged === true ? "changed" : "unchanged";
+      write(`${paint(36, heading(event, "●", `RESULT ← ${String(payload.action)} (${changed})`))}\n${pretty(payload)}`);
+    }
+    if (event.type === "run_finished") {
+      const payload = event.payload as { status?: unknown };
+      const code = payload.status === "verified" ? 32 : 33;
+      write(`${paint(code, heading(event, "■", `RUN FINISHED: ${String(payload.status)}`))}\n${pretty(payload)}`);
+    }
   };
 }
 

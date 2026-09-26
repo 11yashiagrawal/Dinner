@@ -49,6 +49,14 @@ export OPENROUTER_MODEL="openai/gpt-5.2"
 
 OpenRouter is the live development provider until the organizer publishes its official transport. Override the model per run with `--model <openrouter-model-id>`. The CLI accepts either `--task` or `--task-file`, never both. If neither is supplied, it prompts only when connected to an interactive terminal; headless execution exits with an error.
 
+For a guided run, invoke the command without arguments in a terminal:
+
+```bash
+make run
+```
+
+The wizard asks for the repository, task (or an `@/path/to/task.md` file), model, repository map, budgets, and output directory, then shows the full configuration before starting. During execution, numbered terminal events show every model action and every redacted tool result, including captured command output previews. Complete command logs remain in the run's `checks/` directory.
+
 Direct invocation exposes optional budgets:
 
 ```bash
