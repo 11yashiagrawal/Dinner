@@ -126,6 +126,15 @@ function parseAction(value: unknown): ModelAction {
     }
     case "apply_patch":
       return { type: "apply_patch", patch: requiredString(action.patch, "action.patch") };
+    case "replace_text":
+      return {
+        type: "replace_text",
+        path: requiredString(action.path, "action.path"),
+        search: requiredString(action.search, "action.search"),
+        replacement: typeof action.replacement === "string"
+          ? action.replacement
+          : (() => { throw new ModelResponseValidationError("action.replacement must be a string."); })(),
+      };
     case "replace_file":
       return {
         type: "replace_file",

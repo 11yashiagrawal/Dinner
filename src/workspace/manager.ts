@@ -382,6 +382,47 @@ export class IsolatedWorkspace {
     }
   }
 
+  async replaceText(path: string, search: string, replacement: string): Promise<WorkspaceResult<PatchApplication>> {
+    try {
+      if (search === "") {
+        throw new WorkspaceException("REPLACEMENT_REJECTED", "Search text must not be empty.");
+      }
+      if (search.includes("\0") || replacement.includes("\0")) {
+        throw new WorkspaceException("REPLACEMENT_REJECTED", "Search and replacement content must be text.");
+      }
+      const target = await workspaceEditPath(this.workspacePath, path);
+      const targetStat = await lstat(target);
+      if (targetStat.isSymbolicLink() || !targetStat.isFile()) {
+        throw new WorkspaceException(
+          "REPLACEMENT_REJECTED",
+          `Replacement target must be a regular file: ${path}`,
+        );
+      }
+      const existing = await readFile(target, "utf8");
+      if (existing.includes("\0")) {
+        throw new WorkspaceException(
+          "REPLACEMENT_REJECTED",
+          `Replacement target must be a text file: ${path}`,
+        );
+      }
+      const first = existing.indexOf(search);
+      if (first === -1) {
+        throw new WorkspaceException("REPLACEMENT_REJECTED", "Search text was not found.");
+      }
+      if (existing.indexOf(search, first + search.length) !== -1) {
+        throw new WorkspaceException("REPLACEMENT_REJECTED", "Search text is not unique.");
+      }
+      const next = `${existing.slice(0, first)}${replacement}${existing.slice(first + search.length)}`;
+      if (next === existing) {
+        throw new WorkspaceException("REPLACEMENT_REJECTED", "Replacement content is unchanged.");
+      }
+      await writeFile(target, next);
+      return success({ changedFiles: await changedFiles(this.workspacePath, this.baselineRevision) });
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
   async createCheckpoint(label: string): Promise<WorkspaceResult<WorkspaceCheckpoint>> {
     try {
       if (label.trim() === "") {

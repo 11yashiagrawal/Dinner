@@ -219,6 +219,32 @@ describe("autonomous agent vertical slice", () => {
     expect(await readFile(result.patchPath, "utf8")).toContain("return a + b");
   });
 
+  test("recovers from bad patch syntax with exact text replacement", async () => {
+    const source = await codingFixture();
+    const { result } = await runWithScript({
+      source,
+      script: [
+        turn({ type: "read_file", path: "src/math.ts" }, "inspect implementation"),
+        turn({ type: "apply_patch", patch: "*** Begin Patch\n*** Update File: src/math.ts\n@@\n-  return a - b;\n+  return a + b;\n*** End Patch" }, "try non-git patch"),
+        turn({
+          type: "replace_text",
+          path: "src/math.ts",
+          search: "  return a - b;",
+          replacement: "  return a + b;",
+        }, "replace unique operator line after patch syntax failed"),
+        turn({ type: "run_command", command: "bun test", purpose: "verification" }),
+        turn({ type: "inspect_diff" }),
+        turn({ type: "finish", summary: "Corrected addition and verified." }),
+      ],
+    });
+
+    expect(result.status).toBe("verified");
+    expect(result.recovery.failures).toEqual([
+      expect.objectContaining({ kind: "patch", action: "apply_patch" }),
+    ]);
+    expect(await readFile(result.patchPath, "utf8")).toContain("return a + b");
+  });
+
   test("recovers from one invalid model response", async () => {
     const source = await codingFixture();
     const { result, model } = await runWithScript({

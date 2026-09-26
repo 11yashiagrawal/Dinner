@@ -180,6 +180,32 @@ deleted file mode 100644
 });
 
 describe("IsolatedWorkspace file replacement", () => {
+  test("replaces a unique text snippet only inside the isolated workspace", async () => {
+    const source = await sourceRepository();
+    const workspace = await createWorkspace(source);
+
+    const result = await workspace.replaceText("a.txt", "alpha", "beta");
+
+    expect(result).toEqual({ ok: true, value: { changedFiles: ["a.txt"] } });
+    expect(await readFile(join(workspace.workspacePath, "a.txt"), "utf8")).toBe("beta\n");
+    expect(await readFile(join(source, "a.txt"), "utf8")).toBe("alpha\n");
+  });
+
+  test("rejects missing and ambiguous text replacements", async () => {
+    const source = await sourceRepository();
+    await writeFile(join(source, "a.txt"), "alpha\nalpha\n");
+    const workspace = await createWorkspace(source);
+
+    expect(await workspace.replaceText("a.txt", "missing", "beta")).toMatchObject({
+      ok: false,
+      error: { code: "REPLACEMENT_REJECTED" },
+    });
+    expect(await workspace.replaceText("a.txt", "alpha", "beta")).toMatchObject({
+      ok: false,
+      error: { code: "REPLACEMENT_REJECTED" },
+    });
+  });
+
   test("replaces text files only inside the isolated workspace", async () => {
     const source = await sourceRepository();
     const workspace = await createWorkspace(source);

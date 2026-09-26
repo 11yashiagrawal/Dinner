@@ -58,7 +58,7 @@ interface ToolObservation {
 
 const SYSTEM_PROMPT = `You are an autonomous coding agent. Choose exactly one structured action per turn.
 Return only a JSON object shaped as {"intent":"short description","action":{"type":"...",...}}. Use action type run_command with a command field for shell commands.
-Inspect before editing. Prefer list_files, search, and read_file over shell commands for repository inspection. Use unified Git patches for apply_patch. If a focused patch fails because file context drifted, use replace_file with the complete intended text of a file you have already read. Create a checkpoint before a risky approach and restore it when abandoning that approach. Commands run in an isolated Docker container whose workspace root is /workspace; never use host artifact or workspace paths in commands.
+Inspect before editing. Prefer list_files, search, and read_file over shell commands for repository inspection. Use unified Git patches for apply_patch. If a focused patch fails because file context drifted, use replace_text for exact unique snippet edits; use replace_file only when you have complete intended file text. Create a checkpoint before a risky approach and restore it when abandoning that approach. Commands run in an isolated Docker container whose workspace root is /workspace; never use host artifact or workspace paths in commands.
 Label commands as setup, agent, or verification. Before finish, inspect the diff and run a relevant verification command after the final edit.
 Never claim a check passed unless its observed tool result says it passed. Do not remove assertions, disable tests, or modify evaluator inputs to manufacture success.`;
 
@@ -80,10 +80,10 @@ function looksLikeShellFileRead(action: Exclude<ModelAction, { type: "finish" }>
 
 function explorationRejection(action: Exclude<ModelAction, { type: "finish" }>, unchangedExplorationSteps: number): string | null {
   if (unchangedExplorationSteps >= MAX_UNCHANGED_EXPLORATION_STEPS && isExplorationAction(action)) {
-    return "Action rejected because the unchanged-code exploration limit was reached. Apply a patch, replace a file, or finish with the evidence already collected.";
+    return "Action rejected because the unchanged-code exploration limit was reached. Apply a patch, replace text, replace a file, or finish with the evidence already collected.";
   }
   if (unchangedExplorationSteps >= MAX_UNCHANGED_SHELL_FILE_READS && looksLikeShellFileRead(action)) {
-    return "Action rejected because shell file-printing is wasting the edit budget after prior inspection. Use read_file for bounded inspection only if the file changed; otherwise apply_patch or replace_file now.";
+    return "Action rejected because shell file-printing is wasting the edit budget after prior inspection. Use read_file for bounded inspection only if the file changed; otherwise apply_patch, replace_text, or replace_file now.";
   }
   return null;
 }
@@ -146,6 +146,12 @@ async function dispatchAction(options: {
       const application = await workspace.applyPatch(action.patch);
       result = application;
       if (!application.ok) failure = { kind: "patch", detail: application.error.message };
+      break;
+    }
+    case "replace_text": {
+      const replacement = await workspace.replaceText(action.path, action.search, action.replacement);
+      result = replacement;
+      if (!replacement.ok) failure = { kind: "patch", detail: replacement.error.message };
       break;
     }
     case "replace_file": {

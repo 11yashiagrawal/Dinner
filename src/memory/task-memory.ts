@@ -89,7 +89,11 @@ export class TaskMemory {
   recordDecision(decision: ModelDecision): void {
     this.pendingAssistant = { role: "assistant", content: JSON.stringify(decision) };
     if (decision.intent !== undefined) this.pushUnique(this.hypotheses, decision.intent);
-    if (decision.action.type === "apply_patch" || decision.action.type === "replace_file") {
+    if (
+      decision.action.type === "apply_patch" ||
+      decision.action.type === "replace_text" ||
+      decision.action.type === "replace_file"
+    ) {
       this.edits.push(clipped(decision.intent ?? "Edited code", 300));
     }
   }
