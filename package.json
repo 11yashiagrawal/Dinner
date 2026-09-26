@@ -7,6 +7,7 @@
     "start": "bun run src/cli.ts",
     "benchmark": "bun run src/benchmark/cli.ts",
     "test": "bun test",
+    "contract": "bun test tests/execution-contract.test.ts",
     "typecheck": "tsc --noEmit",
     "check": "bun run typecheck && bun test"
   },

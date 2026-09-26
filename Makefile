@@ -1,4 +1,4 @@
-.PHONY: setup runner-image run benchmark test test-docker check
+.PHONY: setup runner-image run benchmark test test-docker contract rehearse-clean check
 
 setup:
 	bun install --frozen-lockfile
@@ -17,6 +17,12 @@ test:
 
 test-docker:
 	DINNER_DOCKER_INTEGRATION=1 bun test tests/docker-runner.integration.test.ts tests/benchmark-runner.integration.test.ts
+
+contract:
+	bun test tests/execution-contract.test.ts
+
+rehearse-clean:
+	bash scripts/rehearse-clean-install.sh
 
 check:
 	bun run check
