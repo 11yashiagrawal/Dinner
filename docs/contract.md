@@ -1,0 +1,84 @@
+# Harness execution contract
+
+Status: provisional until the original problem statement and submission guidelines are available.
+
+## Product goal
+
+The harness receives a software-engineering task and a local Git repository, works in an isolated copy, and returns a patch with machine-readable evidence. It runs autonomously after invocation and must terminate within configured limits.
+
+The product is a TypeScript application executed by Bun. It is initially tested against TypeScript/JavaScript and Python target repositories on Linux. Target-repository commands execute in disposable Docker containers with network access. The model client remains outside those containers, and API credentials are never forwarded into them.
+
+## Proposed invocation
+
+The stable headless interface will be:
+
+```text
+bun run src/cli.ts run \
+  --repo <absolute-or-relative-repository-path> \
+  (--task <text> | --task-file <path>) \
+  [--output <artifact-directory>] \
+  [--max-steps <positive-integer>] \
+  [--max-minutes <positive-number>] \
+  [--max-model-calls <positive-integer>]
+```
+
+`make run` will invoke the same entrypoint once the organizer's required launch behavior is confirmed. When attached to an interactive terminal, a missing task may be prompted for. In a noninteractive process, missing required input is an error rather than a prompt.
+
+The input repository is never modified by default. Each run creates an isolated working copy beneath its artifact directory. A successful or partial run preserves that working copy for inspection.
+
+## Result contract
+
+Every run that reaches local initialization writes:
+
+- `result.json`: final status, termination reason, changed files, verification summary, timing, usage when reported by the provider, and artifact paths.
+- `patch.diff`: changes relative to the recorded input state, including new and deleted files.
+- `events.jsonl`: ordered structured execution events.
+- `checks/`: complete command outputs referenced by verification records.
+
+The process exits `0` only for `verified`. Other completed outcomes use a nonzero exit code defined by the CLI implementation and repeated in `result.json`.
+
+Statuses:
+
+- `verified`: required available checks passed against the exact final code state. This is evidence of verification, not proof that hidden evaluation tests will pass.
+- `partial`: useful changes exist, but one or more requirements or checks remain unresolved.
+- `blocked`: an external prerequisite prevents meaningful progress.
+- `budget_exhausted`: a configured step, call, time, or token limit ended the run.
+- `failed`: the harness itself could not complete the run.
+
+An independent benchmark runner decides whether a task is `solved`; the agent cannot assign that label to itself.
+
+## Security and isolation boundary
+
+Target commands run in a disposable Linux container with the working copy mounted read-write and an artifact log location controlled by the harness. Network access is permitted throughout the task based on the team's current decision. The harness must redact known credentials from events and logs and must not place model credentials in the container environment.
+
+Docker reduces host exposure but is not presented as a complete security boundary. The implementation will use resource and time limits and avoid privileged containers, host Docker socket mounts, and broad host filesystem mounts.
+
+## Current decisions
+
+| Area | Decision |
+|---|---|
+| Harness implementation | TypeScript with Bun 1.3.x |
+| Interaction | Autonomous headless CLI with readable progress |
+| Target ecosystems tested first | TypeScript/JavaScript and Python |
+| Execution platform | Linux with Docker |
+| Target network | Available throughout task execution |
+| Change delivery | Isolated working copy plus patch and evidence |
+| Development model use | Deterministic fake adapter first; live quota pending |
+| Team/time assumption | 24 hours, mainly one developer working with Codex |
+
+## Provisional organizer requirements
+
+The supplied conversation summary says the repository should expose `make setup`, `make run`, and preferably `make test`; use `AI_API_KEY`; accept a prescribed text model; and require no evaluator code changes. These are treated as provisional rather than official because the original problem and submission documents have not yet been provided.
+
+## Requirements still needing official confirmation
+
+- Provider, exact model identifier, request protocol, supported structured-output features, and quota.
+- Exact evaluator input mechanism and whether interactive input is permitted.
+- Required artifact or repository mutation semantics.
+- Required Makefile targets and process exit behavior.
+- Time, token, disk, CPU, and memory limits.
+- Docker availability and restrictions in the final judging environment.
+- Whether target repositories may access the network and install dependencies.
+- Submission deadline, repository visibility, deliverables, and judging rubric.
+
+The model adapter, task input parser, execution backend, and result writer remain replaceable until these points are confirmed.
