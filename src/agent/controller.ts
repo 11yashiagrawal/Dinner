@@ -377,6 +377,10 @@ export async function runAutonomousTask(
         memory.recordInvalidResponse(modelError.message);
         continue;
       }
+      if (modelError.retryable && modelCalls < options.maxModelCalls) {
+        memory.recordGuidance(`The prior provider call failed transiently: ${modelError.message}. Continue from the latest observed state with one valid structured action.`);
+        continue;
+      }
       status = statusForModelError(modelError);
       terminationReason = `Model error (${modelError.kind}): ${modelError.message}`;
       break;
@@ -421,7 +425,7 @@ export async function runAutonomousTask(
           result: rejection,
         });
         memory.recordObservation(decision.action, rejection);
-        memory.recordGuidance("The inspection budget for unchanged code is exhausted. The next action must be apply_patch, replace_file, or finish. If you have read the target file, prefer replace_file with the complete corrected file text rather than more shell reads.");
+        memory.recordGuidance("The inspection budget for unchanged code is exhausted. The next action must be apply_patch, replace_text, replace_file, or finish. If you know an exact unique snippet, prefer replace_text; use replace_file only with complete corrected file text.");
         if (stagnationInterventions >= maxStagnationInterventions) {
           status = "partial";
           terminationReason = "Stagnation limit reached after repeated exploration without code changes.";
@@ -456,7 +460,7 @@ export async function runAutonomousTask(
       } else if (isExplorationAction(decision.action)) {
         unchangedExplorationSteps += 1;
         if (unchangedExplorationSteps === MAX_UNCHANGED_EXPLORATION_STEPS) {
-          memory.recordGuidance("You have enough inspection evidence and the unchanged-code exploration budget is exhausted. Apply a patch or replace a file next; finish only if the task cannot be completed.");
+          memory.recordGuidance("You have enough inspection evidence and the unchanged-code exploration budget is exhausted. Apply a patch, replace exact text, or replace a file next; finish only if the task cannot be completed.");
         }
       }
       if (decision.action.type === "run_command") commandsRun += 1;

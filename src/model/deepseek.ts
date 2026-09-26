@@ -36,7 +36,7 @@ function transportError(error: unknown): ModelTransportError {
 
 function textContent(content: unknown): string {
   if (typeof content === "string" && content.trim() !== "") return content;
-  throw new ModelTransportError("permanent", "DeepSeek returned no text content.");
+  throw new ModelTransportError("transient", "DeepSeek returned no text content.");
 }
 
 export class DeepSeekTransport implements ModelTransport {
@@ -94,6 +94,6 @@ export function createDeepSeekModel(options: {
       options.model ?? DEFAULT_DEEPSEEK_MODEL,
       options.reasoningEffort ?? "medium",
     ),
-    { requestTimeoutMs: 120_000, maxAttempts: 2 },
+    { requestTimeoutMs: 120_000, maxAttempts: 3 },
   );
 }

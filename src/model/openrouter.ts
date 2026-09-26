@@ -67,7 +67,7 @@ function transportError(error: unknown): ModelTransportError {
 
 function textContent(content: unknown): string {
   if (typeof content === "string" && content.trim() !== "") return content;
-  throw new ModelTransportError("permanent", "OpenRouter returned no text content.");
+  throw new ModelTransportError("transient", "OpenRouter returned no text content.");
 }
 
 export class OpenRouterTransport implements ModelTransport {

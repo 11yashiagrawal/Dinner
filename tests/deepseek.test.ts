@@ -64,6 +64,30 @@ describe("DeepSeek model transport", () => {
     expect(request.reasoning_effort).toBe("high");
   });
 
+
+  test("retries empty provider content and keeps useful responses", async () => {
+    let calls = 0;
+    const model = createDeepSeekModel({
+      apiKey: "secret",
+      client: {
+        chat: {
+          completions: {
+            async create() {
+              calls += 1;
+              if (calls === 1) return { choices: [{ message: { content: "" } }] };
+              return { choices: [{ message: { content: JSON.stringify({ action: { type: "inspect_diff" } }) } }] };
+            },
+          },
+        },
+      },
+    });
+
+    await expect(model.complete({ messages: [] })).resolves.toMatchObject({
+      decision: { action: { type: "inspect_diff" } },
+    });
+    expect(calls).toBe(2);
+  });
+
   test("maps authentication errors without retrying", async () => {
     let calls = 0;
     const model = createDeepSeekModel({

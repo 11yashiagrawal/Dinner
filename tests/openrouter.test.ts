@@ -61,15 +61,25 @@ describe("OpenRouter model transport", () => {
     expect(calls).toBe(1);
   });
 
-  test("rejects empty provider content", async () => {
+  test("treats empty provider content as retryable", async () => {
+    let calls = 0;
     const model = createOpenRouterModel({
       apiKey: "secret",
-      client: { chat: { async send() { return { choices: [{ message: { content: null } }] }; } } },
+      client: {
+        chat: {
+          async send() {
+            calls += 1;
+            return { choices: [{ message: { content: null } }] };
+          },
+        },
+      },
     });
 
     await expect(model.complete({ messages: [] })).rejects.toMatchObject({
       kind: "transport",
-      retryable: false,
+      retryable: true,
+      attempts: 3,
     });
+    expect(calls).toBe(3);
   });
 });
