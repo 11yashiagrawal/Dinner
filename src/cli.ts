@@ -2,6 +2,7 @@
 
 import { ConfigurationError, loadRunConfig, toPublicRunConfig } from "./config";
 import { createAgentEventRenderer, loadFakeModelScript, runAutonomousTask } from "./agent";
+import { createOpenRouterModel } from "./model";
 
 export const HELP = `Dinner — autonomous coding harness
 
@@ -9,7 +10,7 @@ Usage:
   bun run src/cli.ts run --repo <path> (--task <text> | --task-file <path>) [options]
 
 Required environment:
-  AI_API_KEY                 Model credential (provider contract pending)
+  AI_API_KEY                 OpenRouter API key for live development runs
 
 Options:
   --repo <path>              Target Git repository
@@ -26,6 +27,7 @@ Options:
   --repository-map <enabled|disabled>  Add ranked source map to initial context (default: disabled)
   --color <enabled|disabled>  Terminal color; NO_COLOR disables by default
   --model-script <path>      Development-only JSON decisions for the fake model
+  --model <id>               OpenRouter model (default: openai/gpt-5.2)
   --help                     Show this help
 `;
 
@@ -71,14 +73,9 @@ export async function runCli(
     const config = await loadRunConfig(configOptions);
 
     stdout(JSON.stringify(toPublicRunConfig(config), null, 2));
-    if (config.modelScriptPath === undefined) {
-      stderr(
-        "The organizer model transport is not configured yet. Use --model-script for deterministic development runs.",
-      );
-      return 3;
-    }
-
-    const model = await loadFakeModelScript(config.modelScriptPath);
+    const model = config.modelScriptPath === undefined
+      ? createOpenRouterModel({ apiKey: config.apiKey!, model: config.model })
+      : await loadFakeModelScript(config.modelScriptPath);
     const runOptions: Parameters<typeof runAutonomousTask>[0] = {
       repoPath: config.repoPath,
       outputPath: config.outputPath,

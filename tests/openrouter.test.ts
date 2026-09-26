@@ -1,0 +1,75 @@
+import { describe, expect, test } from "bun:test";
+import { createOpenRouterModel } from "../src/model";
+
+describe("OpenRouter model transport", () => {
+  test("sends strict structured output and maps content and usage", async () => {
+    let request: any;
+    let options: any;
+    const model = createOpenRouterModel({
+      apiKey: "not-forwarded",
+      model: "openai/test-model",
+      client: {
+        chat: {
+          async send(nextRequest, nextOptions) {
+            request = nextRequest;
+            options = nextOptions;
+            return {
+              choices: [{ message: { content: JSON.stringify({ action: { type: "inspect_diff" } }) } }],
+              usage: { promptTokens: 12, completionTokens: 4, totalTokens: 16 },
+            };
+          },
+        },
+      },
+    });
+
+    const turn = await model.complete({ messages: [{ role: "user", content: "Inspect it" }] });
+
+    expect(turn).toEqual({
+      decision: { action: { type: "inspect_diff" } },
+      usage: { source: "provider", inputTokens: 12, outputTokens: 4, totalTokens: 16 },
+    });
+    expect(request.chatRequest).toMatchObject({
+      model: "openai/test-model",
+      stream: false,
+      temperature: 0,
+      responseFormat: { type: "json_schema", jsonSchema: { name: "dinner_model_decision", strict: true } },
+    });
+    expect(options.retries).toEqual({ strategy: "none" });
+    expect(options.signal).toBeInstanceOf(AbortSignal);
+    expect(JSON.stringify(request)).not.toContain("not-forwarded");
+  });
+
+  test("maps authentication errors without retrying", async () => {
+    let calls = 0;
+    const model = createOpenRouterModel({
+      apiKey: "secret",
+      client: {
+        chat: {
+          async send() {
+            calls += 1;
+            throw Object.assign(new Error("Unauthorized"), { statusCode: 401 });
+          },
+        },
+      },
+    });
+
+    await expect(model.complete({ messages: [] })).rejects.toMatchObject({
+      kind: "authentication",
+      retryable: false,
+      attempts: 1,
+    });
+    expect(calls).toBe(1);
+  });
+
+  test("rejects empty provider content", async () => {
+    const model = createOpenRouterModel({
+      apiKey: "secret",
+      client: { chat: { async send() { return { choices: [{ message: { content: null } }] }; } } },
+    });
+
+    await expect(model.complete({ messages: [] })).rejects.toMatchObject({
+      kind: "transport",
+      retryable: false,
+    });
+  });
+});

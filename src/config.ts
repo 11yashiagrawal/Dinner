@@ -19,6 +19,7 @@ export interface RunConfig {
   task: string;
   outputPath: string;
   apiKey?: string;
+  model: string;
   modelScriptPath?: string;
   repositoryMapEnabled: boolean;
   colorEnabled: boolean;
@@ -57,6 +58,7 @@ interface RunArguments {
   maxStagnationInterventions?: string;
   maxContextChars?: string;
   modelScript?: string;
+  model?: string;
   repositoryMap?: string;
   color?: string;
 }
@@ -82,6 +84,7 @@ const OPTION_NAMES = new Map<string, keyof RunArguments>([
   ["--max-stagnation-interventions", "maxStagnationInterventions"],
   ["--max-context-chars", "maxContextChars"],
   ["--model-script", "modelScript"],
+  ["--model", "model"],
   ["--repository-map", "repositoryMap"],
   ["--color", "color"],
 ]);
@@ -210,6 +213,7 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
       cwd,
       args.output ?? resolve(tmpdir(), "dinner-runs", `run-${Date.now()}-${randomUUID()}`),
     ),
+    model: args.model?.trim() || env.OPENROUTER_MODEL?.trim() || "openai/gpt-5.2",
     repositoryMapEnabled: args.repositoryMap === undefined || args.repositoryMap === "disabled"
       ? false
       : args.repositoryMap === "enabled"

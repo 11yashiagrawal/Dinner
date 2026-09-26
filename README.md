@@ -24,7 +24,7 @@ The harness includes bounded repository tools, Docker command execution, atomic 
 make setup
 ```
 
-Create local environment configuration when live model access becomes available:
+Create local environment configuration for OpenRouter development runs:
 
 ```bash
 cp .env.example .env
@@ -40,18 +40,19 @@ Show the command contract:
 make run ARGS="--help"
 ```
 
-Validate a live-provider configuration:
+Set `AI_API_KEY` to an OpenRouter key and optionally choose a model:
 
 ```bash
-AI_API_KEY=development-placeholder make run ARGS="--repo . --task 'Describe the requested code change'"
+export AI_API_KEY="your-openrouter-key"
+export OPENROUTER_MODEL="openai/gpt-5.2"
 ```
 
-This currently exits after configuration because the organizer provider contract is pending. For an end-to-end deterministic run, provide `--model-script` as described below. The CLI accepts either `--task` or `--task-file`, never both. If neither is supplied, it prompts only when connected to an interactive terminal; headless execution exits with an error.
+OpenRouter is the live development provider until the organizer publishes its official transport. Override the model per run with `--model <openrouter-model-id>`. The CLI accepts either `--task` or `--task-file`, never both. If neither is supplied, it prompts only when connected to an interactive terminal; headless execution exits with an error.
 
 Direct invocation exposes optional budgets:
 
 ```bash
-AI_API_KEY=development-placeholder bun run src/cli.ts run \
+AI_API_KEY="$AI_API_KEY" bun run src/cli.ts run \
   --repo . \
   --task-file ./issue.txt \
   --output /tmp/dinner-manual \

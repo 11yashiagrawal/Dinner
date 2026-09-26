@@ -35,6 +35,7 @@ describe("loadRunConfig", () => {
     expect(config.budgets).toEqual(DEFAULT_BUDGETS);
     expect(config.repositoryMapEnabled).toBeFalse();
     expect(config.colorEnabled).toBeTrue();
+    expect(config.model).toBe("openai/gpt-5.2");
   });
 
   test("reads a task file", async () => {
@@ -130,6 +131,20 @@ describe("loadRunConfig", () => {
       env: { AI_API_KEY: "secret" },
     });
     expect(config.repositoryMapEnabled).toBeTrue();
+  });
+
+  test("accepts an OpenRouter model from the environment or CLI", async () => {
+    const cwd = await temporaryDirectory();
+    const fromEnvironment = await loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it"], cwd,
+      env: { AI_API_KEY: "secret", OPENROUTER_MODEL: "anthropic/example" },
+    });
+    const fromCli = await loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it", "--model", "openai/example"], cwd,
+      env: { AI_API_KEY: "secret", OPENROUTER_MODEL: "anthropic/example" },
+    });
+    expect(fromEnvironment.model).toBe("anthropic/example");
+    expect(fromCli.model).toBe("openai/example");
   });
 
   test("honors NO_COLOR and an explicit color override", async () => {

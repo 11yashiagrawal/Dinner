@@ -22,9 +22,9 @@ bun run src/cli.ts run \
   [--max-model-calls <positive-integer>]
 ```
 
-During development, `--model-script <path>` supplies a validated JSON array of fake-model decisions and does not require `AI_API_KEY`. This option is for deterministic testing and is not the official evaluation transport.
+During development, OpenRouter is the live provider, selected with `--model <id>` or `OPENROUTER_MODEL`; `AI_API_KEY` holds its credential. `--model-script <path>` supplies a validated JSON array of fake-model decisions and does not require a key. Neither development transport is assumed to be the official evaluation transport.
 
-`make run` invokes the same entrypoint. When attached to an interactive terminal, a missing task may be prompted for. In a noninteractive process, missing required input is an error rather than a prompt. Until the organizer transport is known, a normal live run exits explicitly rather than guessing a provider protocol.
+`make run` invokes the same entrypoint. When attached to an interactive terminal, a missing task may be prompted for. In a noninteractive process, missing required input is an error rather than a prompt. OpenRouter live runs are explicitly identified as development evaluation until the organizer transport is known.
 
 The input repository is never modified by default. Each run creates an isolated working copy beneath its artifact directory. A successful or partial run preserves that working copy for inspection.
 
