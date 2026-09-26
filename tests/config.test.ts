@@ -160,6 +160,43 @@ describe("loadRunConfig", () => {
     expect(JSON.stringify(toPublicRunConfig(config))).not.toContain("deep-secret");
   });
 
+  test("infers DeepSeek when it is the only configured credential", async () => {
+    const cwd = await temporaryDirectory();
+    const config = await loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it"],
+      cwd,
+      env: { DEEPSEEK_API_KEY: "deep-secret" },
+    });
+
+    expect(config.provider).toBe("deepseek");
+    expect(config.model).toBe("deepseek-flash");
+  });
+
+  test("honors MODEL_PROVIDER before credential inference", async () => {
+    const cwd = await temporaryDirectory();
+    expect(loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it"],
+      cwd,
+      env: { MODEL_PROVIDER: "openrouter", DEEPSEEK_API_KEY: "deep-secret" },
+    })).rejects.toThrow("AI_API_KEY is required");
+  });
+
+  test("rejects an invalid provider from CLI or environment", async () => {
+    const cwd = await temporaryDirectory();
+
+    expect(loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it", "--provider", "made-up"],
+      cwd,
+      env: { AI_API_KEY: "secret" },
+    })).rejects.toThrow("--provider must be openrouter or deepseek");
+
+    expect(loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it"],
+      cwd,
+      env: { MODEL_PROVIDER: "made-up", AI_API_KEY: "secret" },
+    })).rejects.toThrow("MODEL_PROVIDER must be openrouter or deepseek");
+  });
+
   test("requires the credential belonging to the selected provider", async () => {
     const cwd = await temporaryDirectory();
     expect(loadRunConfig({

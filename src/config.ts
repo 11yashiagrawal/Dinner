@@ -158,6 +158,25 @@ function validateRepository(repo: string | undefined, cwd: string): string {
   return repoPath;
 }
 
+function validateProvider(value: string | undefined, source: "--provider" | "MODEL_PROVIDER"): RunConfig["provider"] | undefined {
+  if (value === undefined || value.trim() === "") return undefined;
+  const provider = value.trim();
+  if (provider === "openrouter" || provider === "deepseek") return provider;
+  throw new ConfigurationError(`${source} must be openrouter or deepseek.`);
+}
+
+function resolveProvider(args: RunArguments, env: Record<string, string | undefined>): RunConfig["provider"] {
+  const cliProvider = validateProvider(args.provider, "--provider");
+  if (cliProvider !== undefined) return cliProvider;
+
+  const envProvider = validateProvider(env.MODEL_PROVIDER, "MODEL_PROVIDER");
+  if (envProvider !== undefined) return envProvider;
+
+  return !env.AI_API_KEY?.trim() && Boolean(env.DEEPSEEK_API_KEY?.trim())
+    ? "deepseek"
+    : "openrouter";
+}
+
 async function resolveTask(
   args: RunArguments,
   cwd: string,
@@ -195,13 +214,7 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
   const args = parseArguments(options.argv);
   const env = options.env ?? process.env;
   const cwd = options.cwd ?? process.cwd();
-  const provider = args.provider === undefined
-    ? env.MODEL_PROVIDER === "deepseek" || (!env.AI_API_KEY?.trim() && Boolean(env.DEEPSEEK_API_KEY?.trim()))
-      ? "deepseek"
-      : "openrouter"
-    : args.provider === "openrouter" || args.provider === "deepseek"
-      ? args.provider
-      : (() => { throw new ConfigurationError("--provider must be openrouter or deepseek."); })();
+  const provider = resolveProvider(args, env);
   const credentialName = provider === "deepseek" ? "DEEPSEEK_API_KEY" : "AI_API_KEY";
   const apiKey = env[credentialName]?.trim();
 
