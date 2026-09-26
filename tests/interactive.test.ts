@@ -90,6 +90,30 @@ describe("interactive run wizard", () => {
     })).toThrow(InteractiveRunCancelled);
   });
 
+
+  test("lets arrow-key users choose a custom repository path", async () => {
+    const detected = await gitRepo("detected");
+    const custom = await gitRepo("custom");
+    const answers = ["", custom, "https://github.com/o/r/issues/12", "", "", "", "", "", ""];
+    const selected: string[] = [];
+    const argv = collectInteractiveRunArguments({
+      ask: () => answers.shift() ?? null,
+      write: () => {},
+      cwd: detected,
+      env: { DEEPSEEK_API_KEY: "secret" },
+      select: (title, choices) => {
+        const choice = title === "Repository"
+          ? choices.find((item) => item.label.includes("Paste custom"))
+          : choices[0];
+        selected.push(choice?.label ?? "missing");
+        return choice?.value ?? null;
+      },
+    });
+
+    expect(selected).toEqual(["Paste custom repository path…", "DeepSeek", "deepseek-flash"]);
+    expect(argv.slice(0, 2)).toEqual(["--repo", custom]);
+  });
+
   test("discovers nearby repositories and rejects non-git paths", async () => {
     const repo = await gitRepo("project");
     const choices = discoverRepositoryChoices(repo, {});

@@ -198,7 +198,7 @@ export function createArrowKeySelector(options: {
 
     let selected = Math.min(Math.max(selectOptions.defaultIndex ?? 0, 0), choices.length - 1);
     const render = () => {
-      output.write("\u001b[?25l\u001b[2J\u001b[H");
+      output.write("\u001b[2J\u001b[3J\u001b[H");
       output.write(renderSelectMenu(title, choices, selected, {
         color,
         ...(selectOptions.help === undefined ? {} : { help: selectOptions.help }),
@@ -207,6 +207,7 @@ export function createArrowKeySelector(options: {
     };
 
     const previousRawMode = input.isRaw;
+    output.write("\u001b[?1049h\u001b[?25l");
     input.setRawMode(true);
     input.resume();
     render();
@@ -236,7 +237,7 @@ export function createArrowKeySelector(options: {
       }
     } finally {
       input.setRawMode(previousRawMode);
-      output.write("\u001b[?25h");
+      output.write("\u001b[?25h\u001b[?1049l");
     }
   };
 }

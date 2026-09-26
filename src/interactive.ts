@@ -12,6 +12,8 @@ const PROVIDER_MODELS = {
   qwen: ["qwen-plus", "qwen-max", "qwen-turbo"],
 } as const;
 
+const CUSTOM_REPOSITORY_VALUE = "__caramel_custom_repository_path__";
+
 type InteractiveProvider = keyof typeof PROVIDER_MODELS;
 
 export class InteractiveRunCancelled extends Error {
@@ -142,18 +144,30 @@ export function collectInteractiveRunArguments(options: {
 
   const repositoryChoices = discoverRepositoryChoices(options.cwd, env);
   const currentRepo = nearestGitRepository(options.cwd);
-  const repoChoiceItems: SelectChoice[] = repositoryChoices.map((repo) => ({
-    label: repo,
-    value: repo,
-    ...(repo === currentRepo ? { hint: "current repo" } : {}),
-  }));
+  const repoChoiceItems: SelectChoice[] = [
+    ...repositoryChoices.map((repo) => ({
+      label: repo,
+      value: repo,
+      ...(repo === currentRepo ? { hint: "current repo" } : {}),
+    })),
+    {
+      label: "Paste custom repository path…",
+      value: CUSTOM_REPOSITORY_VALUE,
+      hint: "drag a folder or paste ~/path/to/repo",
+    },
+  ];
   let repo: string;
-  if (repoChoiceItems.length > 0 && options.select !== undefined) {
+  if (repositoryChoices.length > 0 && options.select !== undefined) {
     const selectedRepo = options.select("Repository", repoChoiceItems, {
       defaultIndex: 0,
-      help: "Use ↑/↓ or j/k. Press Enter to choose the repository.",
+      help: "Use ↑/↓ or j/k. Press Enter to choose, or pick custom path.",
     });
-    repo = resolveRepositoryInput(selectedRepo ?? repoChoiceItems[0]!.value, repositoryChoices, options.cwd);
+    if (selectedRepo === CUSTOM_REPOSITORY_VALUE) {
+      const customPath = answer(options.ask, "Repository path", options.cwd, true);
+      repo = resolveRepositoryInput(customPath, repositoryChoices, options.cwd);
+    } else {
+      repo = resolveRepositoryInput(selectedRepo ?? repoChoiceItems[0]!.value, repositoryChoices, options.cwd);
+    }
   } else {
     if (repositoryChoices.length > 0) {
       write(box("Repository", [
