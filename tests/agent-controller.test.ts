@@ -389,6 +389,32 @@ describe("autonomous agent vertical slice", () => {
     expect(result.metrics.stagnationInterventions).toBe(0);
   });
 
+  test("bounds varied exploration that never changes code", async () => {
+    const source = await codingFixture();
+    const { result, model } = await runWithScript({
+      source,
+      maxSteps: 20,
+      maxStagnationInterventions: 2,
+      script: [
+        ...Array.from({ length: 8 }, (_, index) =>
+          turn({ type: "list_files" as const, path: ".", maxDepth: index + 1 })),
+        turn({ type: "search", query: "add" }),
+        turn({ type: "read_file", path: "src/math.ts" }),
+      ],
+    });
+
+    expect(result.status).toBe("partial");
+    expect(result.terminationReason).toContain("exploration without code changes");
+    expect(result.metrics).toMatchObject({
+      steps: 8,
+      modelCalls: 10,
+      stagnationInterventions: 2,
+    });
+    expect(model.requests[8]?.messages.map((message) => message.content).join("\n")).toContain(
+      "exploration budget is exhausted",
+    );
+  });
+
   test("rejects exploration inside the final verification reserve without spending an action step", async () => {
     const source = await codingFixture();
     const { result, model } = await runWithScript({

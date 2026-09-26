@@ -58,9 +58,18 @@ interface ToolObservation {
 
 const SYSTEM_PROMPT = `You are an autonomous coding agent. Choose exactly one structured action per turn.
 Return only a JSON object shaped as {"intent":"short description","action":{"type":"...",...}}. Use action type run_command with a command field for shell commands.
-Inspect before editing. Use unified Git patches for apply_patch. Create a checkpoint before a risky approach and restore it when abandoning that approach. Commands run in an isolated Docker container.
+Inspect before editing. Prefer list_files, search, and read_file over shell commands for repository inspection. Use unified Git patches for apply_patch. Create a checkpoint before a risky approach and restore it when abandoning that approach. Commands run in an isolated Docker container whose workspace root is /workspace; never use host artifact or workspace paths in commands.
 Label commands as setup, agent, or verification. Before finish, inspect the diff and run a relevant verification command after the final edit.
 Never claim a check passed unless its observed tool result says it passed. Do not remove assertions, disable tests, or modify evaluator inputs to manufacture success.`;
+
+const MAX_UNCHANGED_EXPLORATION_STEPS = 8;
+
+function isExplorationAction(action: Exclude<ModelAction, { type: "finish" }>): boolean {
+  return action.type === "list_files" ||
+    action.type === "search" ||
+    action.type === "read_file" ||
+    (action.type === "run_command" && action.purpose !== "verification");
+}
 
 async function currentState(workspace: IsolatedWorkspace): Promise<WorkspaceState> {
   const state = await workspace.inspectChanges();
@@ -255,6 +264,7 @@ export async function runAutonomousTask(
   let modelCalls = 0;
   let commandsRun = 0;
   let stagnationInterventions = 0;
+  let unchangedExplorationSteps = 0;
   let verificationReserveActivations = 0;
   let reserveActive = false;
   let verificationCommands = 0;
@@ -368,6 +378,30 @@ export async function runAutonomousTask(
 
     steps += 1;
     try {
+      if (
+        unchangedExplorationSteps >= MAX_UNCHANGED_EXPLORATION_STEPS &&
+        isExplorationAction(decision.action)
+      ) {
+        steps -= 1;
+        stagnationInterventions += 1;
+        const rejection = {
+          ok: false,
+          error: "Action rejected because the unchanged-code exploration limit was reached. Apply a patch or finish with the evidence already collected.",
+        };
+        await events.write("tool_result", {
+          action: decision.action.type,
+          workspaceChanged: false,
+          result: rejection,
+        });
+        memory.recordObservation(decision.action, rejection);
+        memory.recordGuidance("The inspection budget for unchanged code is exhausted. The next action must apply_patch or finish; do not perform more reads, searches, listings, or non-verification shell commands.");
+        if (stagnationInterventions >= maxStagnationInterventions) {
+          status = "partial";
+          terminationReason = "Stagnation limit reached after repeated exploration without code changes.";
+          break;
+        }
+        continue;
+      }
       const allowedDuringReserve =
         decision.action.type === "inspect_diff" ||
         (decision.action.type === "run_command" && decision.action.purpose === "verification");
@@ -391,6 +425,12 @@ export async function runAutonomousTask(
       if (observation.workspaceChanged) {
         verifiedPatchSha = null;
         diffReviewedPatchSha = null;
+        unchangedExplorationSteps = 0;
+      } else if (isExplorationAction(decision.action)) {
+        unchangedExplorationSteps += 1;
+        if (unchangedExplorationSteps === MAX_UNCHANGED_EXPLORATION_STEPS) {
+          memory.recordGuidance("You have enough inspection evidence and the unchanged-code exploration budget is exhausted. Apply a patch next or finish if the task cannot be completed.");
+        }
       }
       if (decision.action.type === "run_command") commandsRun += 1;
       if (decision.action.type === "inspect_diff") {
