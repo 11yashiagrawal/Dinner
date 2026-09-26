@@ -8,6 +8,7 @@ import {
   type ModelMessage,
 } from "../model";
 import { RepositoryTools } from "../tools";
+import { createEvidence, discoverChecks, evidenceForFinalState, type VerificationEvidence } from "../verification";
 import { IsolatedWorkspace, type WorkspaceState } from "../workspace";
 import { AgentEventWriter } from "./events";
 import {
@@ -51,8 +52,8 @@ Inspect before editing. Use unified Git patches for apply_patch. Commands run in
 Label commands as setup, agent, or verification. Before finish, inspect the diff and run a relevant verification command after the final edit.
 Never claim a check passed unless its observed tool result says it passed.`;
 
-function initialUserMessage(task: string, metadata: unknown): string {
-  return `Task:\n${task}\n\nRepository metadata:\n${JSON.stringify(metadata, null, 2)}`;
+function initialUserMessage(task: string, metadata: unknown, checks: unknown): string {
+  return `Task:\n${task}\n\nRepository metadata:\n${JSON.stringify(metadata, null, 2)}\n\nLikely checks discovered by the harness:\n${JSON.stringify(checks, null, 2)}`;
 }
 
 function observationMessage(action: ModelAction, observation: unknown): string {
@@ -170,9 +171,10 @@ export async function runAutonomousTask(
       await DockerCommandRunner.create({ workspacePath, logsPath }))
   )(workspace.workspacePath, checksPath);
   const metadata = await repository.metadata();
+  const discoveredChecks = metadata.ok ? discoverChecks(metadata.value) : [];
   const messages: ModelMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: initialUserMessage(options.task, metadata) },
+    { role: "user", content: initialUserMessage(options.task, metadata, discoveredChecks) },
   ];
   const usage = emptyUsageSummary();
   let steps = 0;
@@ -180,6 +182,8 @@ export async function runAutonomousTask(
   let verificationCommands = 0;
   let lastVerification: CommandResult | null = null;
   let verifiedPatchSha: string | null = null;
+  let diffReviewedPatchSha: string | null = null;
+  const verificationEvidence: VerificationEvidence[] = [];
   let status: AgentStatus = "failed";
   let terminationReason = "Controller stopped unexpectedly.";
   let summary = "No model summary was produced.";
@@ -255,13 +259,16 @@ export async function runAutonomousTask(
       const verified =
         state.changedFiles.length > 0 &&
         verifiedPatchSha !== null &&
-        verifiedPatchSha === state.patchSha256;
+        verifiedPatchSha === state.patchSha256 &&
+        diffReviewedPatchSha === state.patchSha256;
       status = verified ? "verified" : "partial";
       terminationReason = verified
         ? "Model requested finish with successful verification for the final code state."
         : state.changedFiles.length === 0
           ? "Model requested finish without producing code changes."
-          : "Model requested finish without successful verification for the final changed state.";
+          : diffReviewedPatchSha !== state.patchSha256
+            ? "Model requested finish without reviewing the final diff."
+            : "Model requested finish without successful verification for the final changed state.";
       break;
     }
 
@@ -274,19 +281,26 @@ export async function runAutonomousTask(
         commandExecutor,
         remainingTimeMs: Math.max(1, deadline - now()),
       });
-      if (observation.workspaceChanged) verifiedPatchSha = null;
+      if (observation.workspaceChanged) {
+        verifiedPatchSha = null;
+        diffReviewedPatchSha = null;
+      }
+      if (decision.action.type === "inspect_diff") {
+        diffReviewedPatchSha = (await currentState(workspace)).patchSha256;
+      }
       if (observation.verification !== undefined) {
         verificationCommands += 1;
         lastVerification = observation.verification;
-        if (
-          observation.verification.status === "completed" &&
-          observation.verification.exitCode === 0 &&
-          !observation.workspaceChanged
-        ) {
-          verifiedPatchSha = (await currentState(workspace)).patchSha256;
-        } else {
-          verifiedPatchSha = null;
-        }
+        const state = await currentState(workspace);
+        const evidence = createEvidence({
+          result: observation.verification,
+          codeFingerprint: state.patchSha256,
+          baseline: state.changedFiles.length === 0,
+        });
+        verificationEvidence.push(evidence);
+        verifiedPatchSha = evidence.status === "passed" && !observation.workspaceChanged
+          ? state.patchSha256
+          : null;
       }
       await events.write("tool_result", {
         action: decision.action.type,
@@ -317,10 +331,11 @@ export async function runAutonomousTask(
     ? exported.value
     : { patchPath: resolve(workspace.runRoot, "patch.diff"), changedFiles: [] };
   const finalState = await currentState(workspace);
+  const finalEvidence = evidenceForFinalState(verificationEvidence, finalState.patchSha256);
   const successfulFinalState =
     finalState.changedFiles.length > 0 &&
-    verifiedPatchSha !== null &&
-    verifiedPatchSha === finalState.patchSha256;
+    finalEvidence.at(-1)?.status === "passed" &&
+    diffReviewedPatchSha === finalState.patchSha256;
   const resultPath = resolve(workspace.runRoot, "result.json");
   const result: AgentRunResult = {
     runId,
@@ -337,6 +352,9 @@ export async function runAutonomousTask(
     verification: {
       commandsRun: verificationCommands,
       successfulFinalState,
+      diffReviewedForFinalState: diffReviewedPatchSha === finalState.patchSha256,
+      discoveredChecks,
+      evidence: verificationEvidence,
       lastResult: lastVerification,
     },
     metrics: {

@@ -216,7 +216,7 @@ describe("autonomous agent vertical slice", () => {
     });
 
     expect(result.status).toBe("partial");
-    expect(result.verification).toEqual({
+    expect(result.verification).toMatchObject({
       commandsRun: 0,
       successfulFinalState: false,
       lastResult: null,
@@ -251,6 +251,7 @@ describe("autonomous agent vertical slice", () => {
         turn({ type: "apply_patch", patch: FIX_PATCH }),
         turn({ type: "run_command", command: "bun test", purpose: "verification" }),
         turn({ type: "run_command", command: "exit 9", purpose: "verification" }),
+        turn({ type: "inspect_diff" }),
         turn({ type: "finish", summary: "The latest check failed." }),
       ],
     });
@@ -261,5 +262,20 @@ describe("autonomous agent vertical slice", () => {
       successfulFinalState: false,
       lastResult: { exitCode: 9 },
     });
+  });
+
+  test("does not treat a zero-test command as proof of a fix", async () => {
+    const source = await codingFixture();
+    const { result } = await runWithScript({
+      source,
+      script: [
+        turn({ type: "apply_patch", patch: FIX_PATCH }),
+        turn({ type: "run_command", command: "echo '0 tests'", purpose: "verification" }),
+        turn({ type: "inspect_diff" }),
+        turn({ type: "finish", summary: "No tests actually ran." }),
+      ],
+    });
+    expect(result.status).toBe("partial");
+    expect(result.verification.evidence[0]?.status).toBe("unknown");
   });
 });
