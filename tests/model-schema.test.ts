@@ -33,12 +33,27 @@ describe("model response schema", () => {
     expect(parseModelDecision(input).action.type).toBe(expectedType);
   });
 
-  test("parses a JSON string without accepting markdown wrappers", () => {
+  test("parses JSON strings and a single JSON markdown fence", () => {
     expect(parseModelDecision('{"intent":"inspect","action":{"type":"list_files"}}')).toEqual({
       intent: "inspect",
       action: { type: "list_files" },
     });
-    expect(() => parseModelDecision("```json\n{}\n```")).toThrow("valid JSON");
+    expect(parseModelDecision("```json\n{\"action\":{\"type\":\"inspect_diff\"}}\n```")).toEqual({
+      action: { type: "inspect_diff" },
+    });
+    expect(() => parseModelDecision("before ```json\n{}\n``` after")).toThrow("valid JSON");
+  });
+
+  test("normalizes bounded provider variants before validation", () => {
+    expect(parseModelDecision({ action: "list_files", path: "src", maxDepth: 2 })).toEqual({
+      action: { type: "list_files", path: "src", maxDepth: 2 },
+    });
+    expect(parseModelDecision({ action: '{"type":"read_file","path":"README.md"}' })).toEqual({
+      action: { type: "read_file", path: "README.md" },
+    });
+    expect(parseModelDecision({ action: { type: "command", cmd: "npm test", purpose: "verification" } })).toEqual({
+      action: { type: "run_command", command: "npm test", purpose: "verification" },
+    });
   });
 
   test("rejects unknown actions and invalid arguments", () => {

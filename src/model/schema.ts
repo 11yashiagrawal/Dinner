@@ -18,6 +18,37 @@ function record(value: unknown, location: string): Record<string, unknown> {
   return value;
 }
 
+function decodeJson(value: string): unknown {
+  const trimmed = value.trim();
+  const fenced = /^```(?:json)?\s*\n([\s\S]*?)\n```$/i.exec(trimmed);
+  try {
+    return JSON.parse(fenced?.[1] ?? trimmed);
+  } catch {
+    throw new ModelResponseValidationError("Model output must be valid JSON.");
+  }
+}
+
+function normalizeAction(response: Record<string, unknown>): unknown {
+  let action = response.action;
+  if (typeof action === "string") {
+    const trimmed = action.trim();
+    if (trimmed.startsWith("{")) action = decodeJson(trimmed);
+    else {
+      const { intent: _intent, action: _action, ...argumentsFromTopLevel } = response;
+      action = { type: trimmed, ...argumentsFromTopLevel };
+    }
+  }
+  if (!isRecord(action)) return action;
+  if (action.type === "command") {
+    return {
+      ...action,
+      type: "run_command",
+      command: action.command ?? action.cmd,
+    };
+  }
+  return action;
+}
+
 function requiredString(value: unknown, location: string): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new ModelResponseValidationError(`${location} must be a non-empty string.`);
@@ -145,16 +176,12 @@ function parseAction(value: unknown): ModelAction {
 export function parseModelDecision(value: unknown): ModelDecision {
   let decoded = value;
   if (typeof value === "string") {
-    try {
-      decoded = JSON.parse(value);
-    } catch {
-      throw new ModelResponseValidationError("Model output must be valid JSON.");
-    }
+    decoded = decodeJson(value);
   }
 
   const response = record(decoded, "model output");
   const intent = optionalString(response.intent, "intent");
-  const decision: ModelDecision = { action: parseAction(response.action) };
+  const decision: ModelDecision = { action: parseAction(normalizeAction(response)) };
   if (intent !== undefined) decision.intent = intent;
   return decision;
 }
