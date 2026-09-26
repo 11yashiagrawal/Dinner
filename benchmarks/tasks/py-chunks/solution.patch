@@ -1,0 +1,6 @@
+diff --git a/chunks.py b/chunks.py
+--- a/chunks.py
++++ b/chunks.py
+@@ -2 +2 @@
+-    return [values[index:index + size] for index in range(0, len(values) // size * size, size)]
++    return [values[index:index + size] for index in range(0, len(values), size)]

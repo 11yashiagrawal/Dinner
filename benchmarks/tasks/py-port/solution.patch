@@ -1,0 +1,9 @@
+diff --git a/ports.py b/ports.py
+--- a/ports.py
++++ b/ports.py
+@@ -2 +2,4 @@
+-    return int(value)
++    port = int(value)
++    if not 1 <= port <= 65535:
++        raise ValueError("port must be between 1 and 65535")
++    return port

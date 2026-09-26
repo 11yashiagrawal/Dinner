@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1, "id": "ts-clamp", "title": "Correct numeric clamping", "language": "typescript", "split": "development",
+  "issue": "clamp() swaps its lower and upper bound behavior. Correct both boundaries without changing in-range values.",
+  "fixtureSha256": "3ace1b247f8aa16a3d288d76153754319eab654a041f0a93538332558f1bc7f9", "evaluatorSha256": "5d0647ca2207368f91aa4e2191f24321ea01a4a353435afa4d93e97bb1c55cb1", "solutionSha256": "3984328b99056bbdf547262ca141274d6f4f3b4cd4c03687c7797ba803431d19",
+  "setup": [],
+  "checks": [
+    { "name": "hidden boundary cases", "kind": "task", "command": "cd \"$DINNER_EVALUATOR\" && bun test ./task.check.ts", "timeoutMs": 30000 },
+    { "name": "public regression suite", "kind": "regression", "command": "bun run test", "timeoutMs": 30000 }
+  ],
+  "budget": { "maxSteps": 8, "maxMinutes": 5, "maxModelCalls": 8 }
+}

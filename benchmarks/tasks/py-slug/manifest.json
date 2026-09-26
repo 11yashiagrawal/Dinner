@@ -3,6 +3,7 @@
   "id": "py-slug",
   "title": "Trim slug separators",
   "language": "python",
+  "split": "development",
   "issue": "slugify() leaves separators at the beginning and end. Return a clean slug.",
   "fixtureSha256": "c11175be698f7e799b1ccb399e884cfafb77dbec3136fdc576fd28fad42d24f5",
   "evaluatorSha256": "5301aa06bd9c078c019d912964bd481eedffda03084b9be2db976223d2bdbfc7",

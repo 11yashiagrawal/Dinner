@@ -29,7 +29,7 @@ function localExecutor(workspacePath: string): Promise<BenchmarkExecutor> {
 }
 
 describe("benchmark runner", () => {
-  for (const id of ["ts-add", "py-slug", "ts-prefix", "py-median"]) {
+  for (const id of ["ts-add", "py-slug", "ts-prefix", "py-median", "ts-clamp", "py-port", "ts-unique", "py-chunks"]) {
     test(`${id}: rejects baseline and accepts the pinned solution`, async () => {
       const taskRoot = join(tasksRoot, id);
       const manifest = await loadBenchmarkManifest(taskRoot);

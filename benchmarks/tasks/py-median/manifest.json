@@ -3,6 +3,7 @@
   "id": "py-median",
   "title": "Implement median",
   "language": "python",
+  "split": "development",
   "issue": "Implement median() for non-empty odd and even length inputs without mutating them.",
   "fixtureSha256": "b94f593b65a8ece3c684bc8ac9c607a86bade9b15b628f2f40ec789e58a8caa2",
   "evaluatorSha256": "4870d72d9bae636f450ec0623d77ff9511500a7bf48e19ab87de5dbb370c577d",

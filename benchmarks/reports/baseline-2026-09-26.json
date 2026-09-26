@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-26T00:00:00.000Z",
+  "harnessRevision": "8e382af",
+  "taskSetSha256": "c2e1e45386c7a2236443dac7edca45408dfc41982f23a69d65b73c08a281960c",
+  "taskSet": { "total": 8, "development": 6, "heldOut": 2 },
+  "model": {
+    "provider": null,
+    "model": null,
+    "configuration": null,
+    "reason": "Organizer model transport and credentials were not available."
+  },
+  "autonomousRuns": {
+    "attempted": 0,
+    "solved": 0,
+    "verifiedClaims": 0,
+    "solveRate": null,
+    "falseSuccessRate": null,
+    "regressionRate": null,
+    "tokensPerSolvedTask": null,
+    "durationPerSolvedTaskMs": null,
+    "usage": null,
+    "reason": "No autonomous model runs were attempted; null metrics are unavailable, not zero performance."
+  },
+  "fixtureCalibration": {
+    "attemptedEvaluations": 16,
+    "expectedOutcomesObserved": 16,
+    "mismatches": 0,
+    "method": "For every task, an empty patch must be unsolved and the pinned solution patch must be solved using the host-injected deterministic evaluator.",
+    "tasks": [
+      { "id": "ts-add", "split": "development", "emptyPatch": "unsolved", "knownGoodPatch": "solved" },
+      { "id": "py-slug", "split": "development", "emptyPatch": "unsolved", "knownGoodPatch": "solved" },
+      { "id": "ts-prefix", "split": "development", "emptyPatch": "unsolved", "knownGoodPatch": "solved" },
+      { "id": "py-median", "split": "development", "emptyPatch": "unsolved", "knownGoodPatch": "solved" },
+      { "id": "ts-clamp", "split": "development", "emptyPatch": "unsolved", "knownGoodPatch": "solved" },
+      { "id": "py-port", "split": "development", "emptyPatch": "unsolved", "knownGoodPatch": "solved" },
+      { "id": "ts-unique", "split": "held_out", "emptyPatch": "unsolved", "knownGoodPatch": "solved" },
+      { "id": "py-chunks", "split": "held_out", "emptyPatch": "unsolved", "knownGoodPatch": "solved" }
+    ]
+  },
+  "limitations": [
+    "Calibration validates task construction and evaluator behavior; it does not measure agent capability.",
+    "Held-out solution patches were used only to calibrate fixtures and were not used to tune agent behavior.",
+    "Docker integration remains gated until a Docker daemon is available."
+  ]
+}

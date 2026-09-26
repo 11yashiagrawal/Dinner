@@ -3,6 +3,7 @@
   "id": "ts-prefix",
   "title": "Restore the ID separator",
   "language": "typescript",
+  "split": "development",
   "issue": "formatId() omits the separator between the configured prefix and numeric ID.",
   "fixtureSha256": "2e0ff2718c256748cdd9c54ba368575c87655580424b1fc3cb181ea8cab2a314",
   "evaluatorSha256": "36a2c3d7485e3cc8a9ba2ef7301a9ed402f0aabb634fe3b03aab6b032fd838db",

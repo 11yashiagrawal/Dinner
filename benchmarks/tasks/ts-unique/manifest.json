@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1, "id": "ts-unique", "title": "Preserve stable unique order", "language": "typescript", "split": "held_out",
+  "issue": "unique() removes duplicates but unexpectedly sorts the result. Preserve the order in which values first appear.",
+  "fixtureSha256": "cfb03f4addd7dc863110dddc57b3a5b96a4596f3a452e97d1c2ca54b34bd8e55", "evaluatorSha256": "486568a5376893b536d36cfdc125036fa762a82f9f6f4ec1908236a61c9402de", "solutionSha256": "d952533b2492246f1b994a64d373e99959f04a1d605b2e09ec930c5bdf726883",
+  "setup": [],
+  "checks": [
+    { "name": "hidden stable-order case", "kind": "task", "command": "cd \"$DINNER_EVALUATOR\" && bun test ./task.check.ts", "timeoutMs": 30000 },
+    { "name": "public regression suite", "kind": "regression", "command": "bun run test", "timeoutMs": 30000 }
+  ],
+  "budget": { "maxSteps": 8, "maxMinutes": 5, "maxModelCalls": 8 }
+}

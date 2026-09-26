@@ -1,0 +1,8 @@
+diff --git a/src/unique.ts b/src/unique.ts
+--- a/src/unique.ts
++++ b/src/unique.ts
+@@ -1,3 +1,3 @@
+ export function unique(values: string[]): string[] {
+-  return [...new Set(values)].sort();
++  return [...new Set(values)];
+ }

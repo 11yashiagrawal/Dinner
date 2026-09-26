@@ -16,6 +16,7 @@ export async function loadBenchmarkManifest(taskRoot: string): Promise<Benchmark
   if (typeof value.id !== "string" || !/^[a-z0-9-]+$/.test(value.id)) throw new Error("Invalid benchmark id.");
   if (typeof value.title !== "string" || typeof value.issue !== "string") throw new Error("Invalid benchmark text.");
   if (value.language !== "typescript" && value.language !== "python") throw new Error("Invalid benchmark language.");
+  if (value.split !== "development" && value.split !== "held_out") throw new Error("Invalid benchmark split.");
   for (const name of ["fixtureSha256", "evaluatorSha256", "solutionSha256"] as const) {
     if (typeof value[name] !== "string" || !HEX.test(value[name])) throw new Error(`Invalid ${name}.`);
   }

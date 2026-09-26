@@ -7,6 +7,8 @@ Each task contains four pinned inputs:
 - `solution.patch`: a known-good calibration patch.
 - `manifest.json`: issue text, budgets, commands, and SHA-256 hashes for all three inputs.
 
+Manifests label tasks as `development` or `held_out`. Moving a held-out task into tuning requires changing that label and recording the reclassification; held-out solution patches are calibration artifacts and must not be used while tuning agent behavior.
+
 The evaluator copies the fixture into a fresh Git repository, checks and applies the submitted patch atomically, then runs task and regression checks. Its `benchmark-result.json` records `solved`, `unsolved`, `timeout`, `invalid_submission`, or `infrastructure_error` independently of the agent's own verification claims.
 
 Build the runner image, then evaluate a patch:

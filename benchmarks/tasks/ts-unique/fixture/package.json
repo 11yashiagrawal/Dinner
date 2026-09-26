@@ -1,0 +1,1 @@
+{"scripts":{"test":"bun test ./test/unique.check.ts"}}

@@ -21,6 +21,7 @@ export interface BenchmarkManifest {
   id: string;
   title: string;
   language: BenchmarkLanguage;
+  split: "development" | "held_out";
   issue: string;
   fixtureSha256: string;
   evaluatorSha256: string;
