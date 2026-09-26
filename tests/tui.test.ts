@@ -1,10 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import { box, createTuiEventRenderer, renderSplash } from "../src/tui";
+import { box, createTuiEventRenderer, renderSelectMenu, renderSplash } from "../src/tui";
 
 describe("terminal UI rendering", () => {
   test("renders splash and boxed panels", () => {
     expect(renderSplash({ color: false })).toContain("Caramel AI Coding Harness");
     expect(box("Setup", ["Provider: deepseek"], { color: false })).toContain("Provider: deepseek");
+  });
+
+
+  test("renders arrow-key selection menus", () => {
+    const menu = renderSelectMenu("Repository", [
+      { label: "/repo/one", value: "/repo/one" },
+      { label: "/repo/two", value: "/repo/two", hint: "current repo" },
+    ], 1, { color: false });
+
+    expect(menu).toContain("Use ↑/↓ and Enter to select");
+    expect(menu).toContain("› /repo/two  current repo");
   });
 
   test("renders live model decisions without raw payload dumps", () => {

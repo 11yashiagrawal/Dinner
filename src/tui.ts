@@ -1,3 +1,4 @@
+import { readSync } from "node:fs";
 import type { AgentEvent, AgentRunResult } from "./agent";
 
 const RESET = "\u001b[0m";
@@ -144,4 +145,98 @@ export function renderRunSummary(result: AgentRunResult, options: { color?: bool
     `patch: ${result.patchPath}`,
     `report: ${result.reportPath}`,
   ], { color });
+}
+
+
+export interface SelectChoice {
+  label: string;
+  value: string;
+  hint?: string;
+}
+
+export type TerminalSelector = (
+  title: string,
+  choices: readonly SelectChoice[],
+  options?: { defaultIndex?: number; help?: string },
+) => string | null;
+
+export function renderSelectMenu(
+  title: string,
+  choices: readonly SelectChoice[],
+  selectedIndex: number,
+  options: { color?: boolean; help?: string } = {},
+): string {
+  const color = options.color ?? true;
+  const lines = [
+    options.help ?? "Use ↑/↓ and Enter to select.",
+    "",
+    ...choices.map((choice, index) => {
+      const selected = index === selectedIndex;
+      const marker = selected ? "›" : " ";
+      const label = selected ? paint(color, BOLD, choice.label) : choice.label;
+      const hint = choice.hint ? paint(color, DIM, `  ${choice.hint}`) : "";
+      return `${marker} ${label}${hint}`;
+    }),
+  ];
+  return box(title, lines, { color, width: 92 });
+}
+
+export function createArrowKeySelector(options: {
+  color?: boolean;
+  input?: NodeJS.ReadStream;
+  output?: NodeJS.WriteStream;
+} = {}): TerminalSelector {
+  const input = options.input ?? process.stdin;
+  const output = options.output ?? process.stdout;
+  const color = options.color ?? true;
+
+  return (title, choices, selectOptions = {}) => {
+    if (choices.length === 0) return null;
+    if (!input.isTTY || !output.isTTY || typeof input.setRawMode !== "function") {
+      return choices[selectOptions.defaultIndex ?? 0]?.value ?? null;
+    }
+
+    let selected = Math.min(Math.max(selectOptions.defaultIndex ?? 0, 0), choices.length - 1);
+    const render = () => {
+      output.write("\u001b[?25l\u001b[2J\u001b[H");
+      output.write(renderSelectMenu(title, choices, selected, {
+        color,
+        ...(selectOptions.help === undefined ? {} : { help: selectOptions.help }),
+      }));
+      output.write("\n");
+    };
+
+    const previousRawMode = input.isRaw;
+    input.setRawMode(true);
+    input.resume();
+    render();
+
+    const buffer = Buffer.alloc(8);
+    try {
+      while (true) {
+        const fd = (input as { fd?: number }).fd ?? 0;
+        const read = readSync(fd, buffer, 0, buffer.length, null);
+        const chunk = buffer.subarray(0, read).toString("utf8");
+
+        if (chunk === "\u0003") throw new Error("Interactive selection cancelled.");
+        if (chunk === "\r" || chunk === "\n") return choices[selected]?.value ?? null;
+        if (chunk === "\u001b[A" || chunk === "k") {
+          selected = selected === 0 ? choices.length - 1 : selected - 1;
+          render();
+        } else if (chunk === "\u001b[B" || chunk === "j") {
+          selected = selected === choices.length - 1 ? 0 : selected + 1;
+          render();
+        } else if (/^[1-9]$/.test(chunk)) {
+          const index = Number(chunk) - 1;
+          if (index >= 0 && index < choices.length) {
+            selected = index;
+            render();
+          }
+        }
+      }
+    } finally {
+      input.setRawMode(previousRawMode);
+      output.write("\u001b[?25h");
+    }
+  };
 }

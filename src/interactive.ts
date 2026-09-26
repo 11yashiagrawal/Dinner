@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { DEFAULT_BUDGETS } from "./config";
 import { normalizeIssueUrl } from "./issue";
-import { box, renderSplash } from "./tui";
+import { box, renderSplash, type SelectChoice, type TerminalSelector } from "./tui";
 
 export type TerminalPrompt = (question: string, defaultValue?: string) => string | null;
 
@@ -125,6 +125,7 @@ export function collectInteractiveRunArguments(options: {
   write?: (message: string) => void;
   cwd: string;
   env?: Record<string, string | undefined>;
+  select?: TerminalSelector;
 }): string[] {
   const write = options.write ?? console.log;
   const env = options.env ?? process.env;
@@ -140,23 +141,53 @@ export function collectInteractiveRunArguments(options: {
   ], { color }));
 
   const repositoryChoices = discoverRepositoryChoices(options.cwd, env);
-  if (repositoryChoices.length > 0) {
-    write(box("Repository", [
-      "Choose a detected Git checkout by number, or paste/drag another path.",
-      ...repositoryChoices.map((repo, index) => `${index + 1}. ${repo}`),
-    ], { color }));
+  const currentRepo = nearestGitRepository(options.cwd);
+  const repoChoiceItems: SelectChoice[] = repositoryChoices.map((repo) => ({
+    label: repo,
+    value: repo,
+    ...(repo === currentRepo ? { hint: "current repo" } : {}),
+  }));
+  let repo: string;
+  if (repoChoiceItems.length > 0 && options.select !== undefined) {
+    const selectedRepo = options.select("Repository", repoChoiceItems, {
+      defaultIndex: 0,
+      help: "Use ↑/↓ or j/k. Press Enter to choose the repository.",
+    });
+    repo = resolveRepositoryInput(selectedRepo ?? repoChoiceItems[0]!.value, repositoryChoices, options.cwd);
   } else {
-    write(box("Repository", [
-      "No nearby Git checkout was detected.",
-      "Paste a path, use '.', or drag the repository folder into the terminal.",
-    ], { color }));
+    if (repositoryChoices.length > 0) {
+      write(box("Repository", [
+        "Choose a detected Git checkout by number, or paste/drag another path.",
+        ...repositoryChoices.map((candidate, index) => `${index + 1}. ${candidate}`),
+      ], { color }));
+    } else {
+      write(box("Repository", [
+        "No nearby Git checkout was detected.",
+        "Paste a path, use '.', or drag the repository folder into the terminal.",
+      ], { color }));
+    }
+    const repoInput = answer(options.ask, "Repository number or path", repositoryChoices[0] === undefined ? options.cwd : "1", true);
+    repo = resolveRepositoryInput(repoInput, repositoryChoices, options.cwd);
   }
-  const repoInput = answer(options.ask, "Repository number or path", repositoryChoices[0] === undefined ? options.cwd : "1", true);
-  const repo = resolveRepositoryInput(repoInput, repositoryChoices, options.cwd);
-  const provider = parseProvider(answer(options.ask, "Provider (deepseek/qwen)", defaultProvider(env)));
+
+  const providerChoices: SelectChoice[] = [
+    { label: "DeepSeek", value: "deepseek", hint: "good default for coding runs" },
+    { label: "Qwen", value: "qwen", hint: "OpenAI-compatible DashScope provider" },
+  ];
+  const defaultProviderValue = defaultProvider(env);
+  const selectedProvider = options.select?.("Provider", providerChoices, {
+    defaultIndex: providerChoices.findIndex((choice) => choice.value === defaultProviderValue),
+    help: "Use ↑/↓ or j/k. Press Enter to choose the model provider.",
+  }) ?? answer(options.ask, "Provider (deepseek/qwen)", defaultProviderValue);
+  const provider = parseProvider(selectedProvider);
+
   const models = PROVIDER_MODELS[provider];
-  write(box("Models", models.map((model, index) => `${index + 1}. ${model}`), { color }));
-  const model = resolveModel(provider, answer(options.ask, "Model number or model id", models[0]));
+  const modelChoices: SelectChoice[] = models.map((model) => ({ label: model, value: model }));
+  const selectedModel = options.select?.("Model", modelChoices, {
+    defaultIndex: 0,
+    help: "Use ↑/↓ or j/k. Press Enter to choose a model.",
+  }) ?? answer(options.ask, "Model number or model id", models[0]);
+  const model = resolveModel(provider, selectedModel);
 
   const credentialName = providerCredential(provider);
   if (!env[credentialName]?.trim()) {

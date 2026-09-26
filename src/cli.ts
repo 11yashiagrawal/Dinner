@@ -10,7 +10,7 @@ import {
   InteractiveRunCancelled,
   type TerminalPrompt,
 } from "./interactive";
-import { createTuiEventRenderer, renderRunSummary } from "./tui";
+import { createArrowKeySelector, createTuiEventRenderer, renderRunSummary } from "./tui";
 
 export const HELP = `Dinner — autonomous coding harness
 
@@ -131,6 +131,7 @@ export async function runCli(
           write: stdout,
           cwd: dependencies.cwd ?? process.cwd(),
           env: dependencies.env ?? process.env,
+          select: createArrowKeySelector({ color: (dependencies.env ?? process.env).NO_COLOR === undefined }),
         })
       : suppliedCommandArgs;
     const configOptions: Parameters<typeof loadRunConfig>[0] = {
