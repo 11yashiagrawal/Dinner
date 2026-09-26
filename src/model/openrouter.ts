@@ -24,6 +24,7 @@ export const MODEL_DECISION_SCHEMA = {
         objectAction({ type: { const: "search" }, query: { type: "string" }, ...optionalPath, maxResults: positiveInteger }, ["type", "query"]),
         objectAction({ type: { const: "read_file" }, path: { type: "string" }, startLine: positiveInteger, endLine: positiveInteger }, ["type", "path"]),
         objectAction({ type: { const: "apply_patch" }, patch: { type: "string" } }, ["type", "patch"]),
+        objectAction({ type: { const: "replace_file" }, path: { type: "string" }, content: { type: "string" } }, ["type", "path", "content"]),
         objectAction({ type: { const: "create_checkpoint" }, label: { type: "string" } }, ["type", "label"]),
         objectAction({ type: { const: "restore_checkpoint" }, checkpointId: { type: "string" } }, ["type", "checkpointId"]),
         objectAction({

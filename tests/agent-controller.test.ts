@@ -188,6 +188,37 @@ describe("autonomous agent vertical slice", () => {
     expect(events.at(-1)).toMatchObject({ type: "run_finished", payload: { status: "verified" } });
   });
 
+  test("recovers from stale patch context by replacing a previously read file", async () => {
+    const source = await codingFixture();
+    const stalePatch = FIX_PATCH.replace("-  return a - b;", "-  return notTheCurrentCode;");
+    const replacement = "export function add(a: number, b: number): number {\n  return a + b;\n}\n";
+
+    const { result } = await runWithScript({
+      source,
+      script: [
+        turn({ type: "read_file", path: "src/math.ts" }, "inspect implementation"),
+        turn({ type: "apply_patch", patch: stalePatch }, "try focused patch"),
+        turn(
+          { type: "replace_file", path: "src/math.ts", content: replacement },
+          "replace file after patch context failed",
+        ),
+        turn(
+          { type: "run_command", command: "bun test", purpose: "verification" },
+          "verify behavior",
+        ),
+        turn({ type: "inspect_diff" }, "review changes"),
+        turn({ type: "finish", summary: "Corrected addition and verified the test." }),
+      ],
+    });
+
+    expect(result.status).toBe("verified");
+    expect(result.changedFiles).toEqual(["src/math.ts"]);
+    expect(result.recovery.failures).toEqual([
+      expect.objectContaining({ kind: "patch", action: "apply_patch" }),
+    ]);
+    expect(await readFile(result.patchPath, "utf8")).toContain("return a + b");
+  });
+
   test("recovers from one invalid model response", async () => {
     const source = await codingFixture();
     const { result, model } = await runWithScript({

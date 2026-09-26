@@ -58,7 +58,7 @@ interface ToolObservation {
 
 const SYSTEM_PROMPT = `You are an autonomous coding agent. Choose exactly one structured action per turn.
 Return only a JSON object shaped as {"intent":"short description","action":{"type":"...",...}}. Use action type run_command with a command field for shell commands.
-Inspect before editing. Prefer list_files, search, and read_file over shell commands for repository inspection. Use unified Git patches for apply_patch. Create a checkpoint before a risky approach and restore it when abandoning that approach. Commands run in an isolated Docker container whose workspace root is /workspace; never use host artifact or workspace paths in commands.
+Inspect before editing. Prefer list_files, search, and read_file over shell commands for repository inspection. Use unified Git patches for apply_patch. If a focused patch fails because file context drifted, use replace_file with the complete intended text of a file you have already read. Create a checkpoint before a risky approach and restore it when abandoning that approach. Commands run in an isolated Docker container whose workspace root is /workspace; never use host artifact or workspace paths in commands.
 Label commands as setup, agent, or verification. Before finish, inspect the diff and run a relevant verification command after the final edit.
 Never claim a check passed unless its observed tool result says it passed. Do not remove assertions, disable tests, or modify evaluator inputs to manufacture success.`;
 
@@ -129,6 +129,12 @@ async function dispatchAction(options: {
       const application = await workspace.applyPatch(action.patch);
       result = application;
       if (!application.ok) failure = { kind: "patch", detail: application.error.message };
+      break;
+    }
+    case "replace_file": {
+      const replacement = await workspace.replaceFile(action.path, action.content);
+      result = replacement;
+      if (!replacement.ok) failure = { kind: "patch", detail: replacement.error.message };
       break;
     }
     case "create_checkpoint": {
@@ -386,7 +392,7 @@ export async function runAutonomousTask(
         stagnationInterventions += 1;
         const rejection = {
           ok: false,
-          error: "Action rejected because the unchanged-code exploration limit was reached. Apply a patch or finish with the evidence already collected.",
+          error: "Action rejected because the unchanged-code exploration limit was reached. Apply a patch, replace a file, or finish with the evidence already collected.",
         };
         await events.write("tool_result", {
           action: decision.action.type,
@@ -394,7 +400,7 @@ export async function runAutonomousTask(
           result: rejection,
         });
         memory.recordObservation(decision.action, rejection);
-        memory.recordGuidance("The inspection budget for unchanged code is exhausted. The next action must apply_patch or finish; do not perform more reads, searches, listings, or non-verification shell commands.");
+        memory.recordGuidance("The inspection budget for unchanged code is exhausted. The next action must apply_patch, replace_file, or finish; do not perform more reads, searches, listings, or non-verification shell commands.");
         if (stagnationInterventions >= maxStagnationInterventions) {
           status = "partial";
           terminationReason = "Stagnation limit reached after repeated exploration without code changes.";
@@ -429,7 +435,7 @@ export async function runAutonomousTask(
       } else if (isExplorationAction(decision.action)) {
         unchangedExplorationSteps += 1;
         if (unchangedExplorationSteps === MAX_UNCHANGED_EXPLORATION_STEPS) {
-          memory.recordGuidance("You have enough inspection evidence and the unchanged-code exploration budget is exhausted. Apply a patch next or finish if the task cannot be completed.");
+          memory.recordGuidance("You have enough inspection evidence and the unchanged-code exploration budget is exhausted. Apply a patch or replace a file next; finish only if the task cannot be completed.");
         }
       }
       if (decision.action.type === "run_command") commandsRun += 1;

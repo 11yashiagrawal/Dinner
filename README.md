@@ -8,9 +8,9 @@ Input repositories are never edited directly. The workspace manager snapshots tr
 
 ## What Dinner does
 
-Dinner accepts a Git repository and engineering task, snapshots the repository into an isolated workspace, lets a validated model action loop inspect and patch it, runs bounded checks, and exports evidence. Completion belongs to the controller: a model cannot mark itself verified without a changed final state, passing evidence for that exact state, and final diff review.
+Dinner accepts a Git repository and engineering task, snapshots the repository into an isolated workspace, lets a validated model action loop inspect and edit it, runs bounded checks, and exports evidence. Completion belongs to the controller: a model cannot mark itself verified without a changed final state, passing evidence for that exact state, and final diff review.
 
-The harness includes bounded repository tools, Docker command execution, atomic patching, checkpoints and recovery, compact task memory, stagnation detection, a verification reserve, independent hidden-test evaluation, and optional issue-guided repository mapping.
+The harness includes bounded repository tools, Docker command execution, atomic patching, guarded whole-file text replacement, checkpoints and recovery, compact task memory, stagnation detection, a verification reserve, independent hidden-test evaluation, and optional issue-guided repository mapping.
 
 ## Requirements
 

@@ -179,6 +179,43 @@ deleted file mode 100644
   });
 });
 
+describe("IsolatedWorkspace file replacement", () => {
+  test("replaces text files only inside the isolated workspace", async () => {
+    const source = await sourceRepository();
+    const workspace = await createWorkspace(source);
+
+    const result = await workspace.replaceFile("a.txt", "beta\n");
+
+    expect(result).toEqual({ ok: true, value: { changedFiles: ["a.txt"] } });
+    expect(await readFile(join(workspace.workspacePath, "a.txt"), "utf8")).toBe("beta\n");
+    expect(await readFile(join(source, "a.txt"), "utf8")).toBe("alpha\n");
+  });
+
+  test("rejects unsafe or meaningless file replacements", async () => {
+    const source = await sourceRepository();
+    await writeFile(join(source, "binary.dat"), Buffer.from([1, 0, 2]));
+    git(source, ["add", "binary.dat"]);
+    const workspace = await createWorkspace(source);
+
+    expect(await workspace.replaceFile("../outside.txt", "escape\n")).toMatchObject({
+      ok: false,
+      error: { code: "REPLACEMENT_REJECTED" },
+    });
+    expect(await workspace.replaceFile("a.txt", "alpha\n")).toMatchObject({
+      ok: false,
+      error: { code: "REPLACEMENT_REJECTED" },
+    });
+    expect(await workspace.replaceFile("a.txt", "binary\0text")).toMatchObject({
+      ok: false,
+      error: { code: "REPLACEMENT_REJECTED" },
+    });
+    expect(await workspace.replaceFile("binary.dat", "text now\n")).toMatchObject({
+      ok: false,
+      error: { code: "REPLACEMENT_REJECTED" },
+    });
+  });
+});
+
 describe("IsolatedWorkspace checkpoints and export", () => {
   test("restores agent changes without losing the input snapshot", async () => {
     const source = await sourceRepository();

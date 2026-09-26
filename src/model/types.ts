@@ -14,6 +14,7 @@ export type ModelAction =
   | { type: "search"; query: string; path?: string; maxResults?: number }
   | { type: "read_file"; path: string; startLine?: number; endLine?: number }
   | { type: "apply_patch"; patch: string }
+  | { type: "replace_file"; path: string; content: string }
   | { type: "create_checkpoint"; label: string }
   | { type: "restore_checkpoint"; checkpointId: string }
   | {

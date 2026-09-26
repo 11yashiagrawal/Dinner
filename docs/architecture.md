@@ -7,7 +7,7 @@ CLI input
   -> run initializer and isolated workspace
   -> controller
        -> model adapter
-       -> repository and patch tools
+       -> repository and edit tools
        -> Docker command runner
        -> task state and event writer
        -> verification gate
@@ -33,7 +33,7 @@ Maintain the original task, current plan, evidence-backed findings, hypotheses, 
 
 ### Repository tools
 
-Provide bounded file listing, text search, ranged reads, atomic patch application, and diff inspection. All paths are resolved against the isolated working copy and checked for traversal and symlink escape. Tool results use typed success and failure variants and mark truncated output explicitly.
+Provide bounded file listing, text search, ranged reads, atomic patch application, guarded whole-file text replacement, and diff inspection. All paths are resolved against the isolated working copy and checked for traversal and symlink escape. Replacement is limited to relative text-file paths inside the workspace, rejects unchanged content and oversized writes, and still exports as a normal Git patch. Tool results use typed success and failure variants and mark truncated output explicitly.
 
 ### Command runner
 

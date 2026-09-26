@@ -3,6 +3,7 @@ export type WorkspaceErrorCode =
   | "INVALID_OUTPUT"
   | "UNSUPPORTED_ENTRY"
   | "PATCH_REJECTED"
+  | "REPLACEMENT_REJECTED"
   | "CHECKPOINT_INVALID"
   | "GIT_ERROR"
   | "IO_ERROR";

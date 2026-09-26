@@ -12,6 +12,7 @@ describe("model response schema", () => {
     [{ action: { type: "search", query: "refreshToken", maxResults: 20 } }, "search"],
     [{ action: { type: "read_file", path: "src/a.ts", startLine: 1, endLine: 10 } }, "read_file"],
     [{ action: { type: "apply_patch", patch: "*** Begin Patch" } }, "apply_patch"],
+    [{ action: { type: "replace_file", path: "src/a.ts", content: "" } }, "replace_file"],
     [{ action: { type: "create_checkpoint", label: "before alternate fix" } }, "create_checkpoint"],
     [{ action: { type: "restore_checkpoint", checkpointId: "latest" } }, "restore_checkpoint"],
     [
@@ -67,6 +68,9 @@ describe("model response schema", () => {
     expect(() => parseModelDecision({ action: { type: "search", query: "" } })).toThrow(
       ModelResponseValidationError,
     );
+    expect(() =>
+      parseModelDecision({ action: { type: "replace_file", path: "src/a.ts", content: 42 } }),
+    ).toThrow("action.content must be a string");
     expect(() =>
       parseModelDecision({ action: { type: "run_command", command: "test", purpose: "claim" } }),
     ).toThrow("setup, agent, or verification");

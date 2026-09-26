@@ -126,6 +126,14 @@ function parseAction(value: unknown): ModelAction {
     }
     case "apply_patch":
       return { type: "apply_patch", patch: requiredString(action.patch, "action.patch") };
+    case "replace_file":
+      return {
+        type: "replace_file",
+        path: requiredString(action.path, "action.path"),
+        content: typeof action.content === "string"
+          ? action.content
+          : (() => { throw new ModelResponseValidationError("action.content must be a string."); })(),
+      };
     case "create_checkpoint":
       return { type: "create_checkpoint", label: requiredString(action.label, "action.label") };
     case "restore_checkpoint":

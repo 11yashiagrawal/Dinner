@@ -53,7 +53,9 @@ export class TaskMemory {
   recordDecision(decision: ModelDecision): void {
     this.pendingAssistant = { role: "assistant", content: JSON.stringify(decision) };
     if (decision.intent !== undefined) this.pushUnique(this.hypotheses, decision.intent);
-    if (decision.action.type === "apply_patch") this.edits.push(clipped(decision.intent ?? "Applied patch", 300));
+    if (decision.action.type === "apply_patch" || decision.action.type === "replace_file") {
+      this.edits.push(clipped(decision.intent ?? "Edited code", 300));
+    }
   }
 
   recordObservation(action: ModelAction, observation: unknown): void {

@@ -26,7 +26,7 @@ During development, OpenRouter and the direct DeepSeek OpenAI-compatible API are
 
 `make run` invokes the same entrypoint. When attached to an interactive terminal, a missing task may be prompted for. In a noninteractive process, missing required input is an error rather than a prompt. OpenRouter live runs are explicitly identified as development evaluation until the organizer transport is known.
 
-The input repository is never modified by default. Each run creates an isolated working copy beneath its artifact directory. A successful or partial run preserves that working copy for inspection.
+The input repository is never modified by default. Each run creates an isolated working copy beneath its artifact directory. Model edits are limited to validated actions against that copy, including atomic Git patch application and guarded whole-file text replacement. A successful or partial run preserves that working copy for inspection.
 
 ## Result contract
 

@@ -50,6 +50,8 @@ function sha256(value: string | Uint8Array): string {
   return new Bun.CryptoHasher("sha256").update(value).digest("hex");
 }
 
+const MAX_REPLACE_FILE_BYTES = 512 * 1024;
+
 async function pathExists(path: string): Promise<boolean> {
   try {
     await lstat(path);
@@ -70,6 +72,17 @@ async function canonicalizeProspectivePath(path: string): Promise<string> {
     ancestor = parent;
   }
   return resolve(await realpath(ancestor), ...missingSegments);
+}
+
+async function workspaceEditPath(root: string, path: string): Promise<string> {
+  if (path.trim() === "" || isAbsolute(path)) {
+    throw new WorkspaceException("REPLACEMENT_REJECTED", "Replacement path must be a relative repository path.");
+  }
+  const target = await canonicalizeProspectivePath(resolve(root, path));
+  if (!isInside(root, target)) {
+    throw new WorkspaceException("REPLACEMENT_REJECTED", `Replacement path escapes the workspace: ${path}`);
+  }
+  return target;
 }
 
 async function runGit(
@@ -321,6 +334,48 @@ export class IsolatedWorkspace {
           applied.stderr.trim() || "Patch application failed.",
         );
       }
+      return success({ changedFiles: await changedFiles(this.workspacePath, this.baselineRevision) });
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  async replaceFile(path: string, content: string): Promise<WorkspaceResult<PatchApplication>> {
+    try {
+      if (content.includes("\0")) {
+        throw new WorkspaceException("REPLACEMENT_REJECTED", "Replacement content must be text.");
+      }
+      if (Buffer.byteLength(content, "utf8") > MAX_REPLACE_FILE_BYTES) {
+        throw new WorkspaceException(
+          "REPLACEMENT_REJECTED",
+          `Replacement content exceeds ${MAX_REPLACE_FILE_BYTES} bytes.`,
+        );
+      }
+
+      const target = await workspaceEditPath(this.workspacePath, path);
+      let existing: string | null = null;
+      if (await pathExists(target)) {
+        const targetStat = await lstat(target);
+        if (targetStat.isSymbolicLink() || !targetStat.isFile()) {
+          throw new WorkspaceException(
+            "REPLACEMENT_REJECTED",
+            `Replacement target must be a regular file: ${path}`,
+          );
+        }
+        existing = await readFile(target, "utf8");
+        if (existing.includes("\0")) {
+          throw new WorkspaceException(
+            "REPLACEMENT_REJECTED",
+            `Replacement target must be a text file: ${path}`,
+          );
+        }
+      }
+      if (existing === content) {
+        throw new WorkspaceException("REPLACEMENT_REJECTED", "Replacement content is unchanged.");
+      }
+
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, content);
       return success({ changedFiles: await changedFiles(this.workspacePath, this.baselineRevision) });
     } catch (error) {
       return failure(error);
