@@ -1,0 +1,7 @@
+[
+  { "intent": "Inspect the implementation named in the issue.", "action": { "type": "read_file", "path": "src/math.ts" } },
+  { "intent": "Replace subtraction with addition.", "action": { "type": "apply_patch", "patch": "diff --git a/src/math.ts b/src/math.ts\n--- a/src/math.ts\n+++ b/src/math.ts\n@@ -1,3 +1,3 @@\n export function add(left: number, right: number): number {\n-  return left - right;\n+  return left + right;\n }\n" } },
+  { "intent": "Run the public regression test.", "action": { "type": "run_command", "command": "bun run test", "purpose": "verification" } },
+  { "intent": "Review the exact final patch.", "action": { "type": "inspect_diff" } },
+  { "intent": "Finish only after evidence and diff review.", "action": { "type": "finish", "summary": "Corrected addition and verified the public regression test." } }
+]

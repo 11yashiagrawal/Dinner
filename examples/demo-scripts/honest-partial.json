@@ -1,0 +1,4 @@
+[
+  { "intent": "Inspect the repository before making claims.", "action": { "type": "list_files", "path": ".", "maxDepth": 3 } },
+  { "intent": "Stop honestly because no supported change was identified.", "action": { "type": "finish", "summary": "Inspected the repository but did not produce or verify a change." } }
+]
