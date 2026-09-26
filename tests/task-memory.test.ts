@@ -37,6 +37,37 @@ describe("TaskMemory", () => {
     expect(messages.at(-1)?.content).toContain("missing action");
   });
 
+
+  test("preserves exact focused read snippets for follow-up text replacement", () => {
+    const memory = new TaskMemory("system", "task", {}, {
+      maxContextChars: 8_000,
+      reserveResponseChars: 1_000,
+      maxEntryChars: 500,
+    });
+    const exactSnippet = "function target() {\n  return 'exact replacement context';\n}\n";
+
+    memory.recordDecision({ action: { type: "read_file", path: "src/focused.ts", startLine: 20, endLine: 24 } });
+    memory.recordObservation(
+      { type: "read_file", path: "src/focused.ts", startLine: 20, endLine: 24 },
+      {
+        ok: true,
+        value: {
+          path: "src/focused.ts",
+          content: exactSnippet,
+          startLine: 20,
+          endLine: 24,
+          totalLines: 40,
+          truncated: false,
+        },
+      },
+    );
+
+    const messages = memory.request().messages;
+    const observation = messages.at(-1)?.content ?? "";
+    expect(observation).toContain("exact replacement context");
+    expect(observation).toContain('"exact":true');
+  });
+
   test("compacts large read observations before keeping them in context", () => {
     const memory = new TaskMemory("system", "task", {}, {
       maxContextChars: 4_000,

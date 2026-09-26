@@ -12,6 +12,9 @@ const DEFAULT_LIMITS: TaskMemoryLimits = {
   maxEntryChars: 1_200,
 };
 
+const EXACT_READ_CONTEXT_CHARS = 3_600;
+const LARGE_READ_EXCERPT_CHARS = 900;
+
 function clipped(value: unknown, maxChars: number): string {
   const text = typeof value === "string" ? value : JSON.stringify(value);
   return text.length <= maxChars ? text : `${text.slice(0, maxChars)}…[truncated]`;
@@ -40,6 +43,7 @@ function compactObservation(action: ModelAction, observation: unknown): unknown 
         truncated?: unknown;
       };
       const content = typeof read.content === "string" ? read.content : "";
+      const exact = content.length <= EXACT_READ_CONTEXT_CHARS;
       return {
         ok: true,
         value: {
@@ -49,7 +53,8 @@ function compactObservation(action: ModelAction, observation: unknown): unknown 
           totalLines: read.totalLines,
           truncated: read.truncated,
           contentChars: content.length,
-          excerpt: clipped(content, 700),
+          exact,
+          excerpt: exact ? content : clipped(content, LARGE_READ_EXCERPT_CHARS),
         },
       };
     }
