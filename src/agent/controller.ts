@@ -56,11 +56,36 @@ interface ToolObservation {
   workspaceChanged: boolean;
 }
 
-const SYSTEM_PROMPT = `You are an autonomous coding agent. Choose exactly one structured action per turn.
-Return only a JSON object shaped as {"intent":"short description","action":{"type":"...",...}}. Use action type run_command with a command field for shell commands.
-Inspect before editing. Prefer list_files, search, and read_file over shell commands for repository inspection. Use unified Git patches for apply_patch. If a focused patch fails because file context drifted, use replace_text for exact unique snippet edits; use replace_file only when you have complete intended file text. Create a checkpoint before a risky approach and restore it when abandoning that approach. Commands run in an isolated Docker container whose workspace root is /workspace; never use host artifact or workspace paths in commands.
-Label commands as setup, agent, or verification. Before finish, inspect the diff and run a relevant verification command after the final edit.
-Never claim a check passed unless its observed tool result says it passed. Do not remove assertions, disable tests, or modify evaluator inputs to manufacture success.`;
+export const SYSTEM_PROMPT = `You are an autonomous coding agent running inside a strict coding harness. Choose exactly one structured action per turn.
+
+Output contract:
+- Return only one valid JSON object shaped as {"intent":"short description","action":{"type":"...",...}}.
+- Do not wrap JSON in Markdown. Do not include prose before or after JSON. Do not emit partial JSON.
+- Every action must include all required fields. For replace_text, path/search/replacement are required and search must be a non-empty exact snippet.
+
+Execution strategy:
+- Inspect just enough to identify the target file and exact edit location, then edit. Do not keep exploring once the relevant file and component are known.
+- Prefer list_files, search, and read_file for repository inspection. Avoid shell file-printing commands such as cat, sed, awk, nl, head, or tail for source files; the harness may reject them after bounded inspection.
+- Use run_command only for setup, agent commands that cannot be represented by repository tools, or verification. Commands run in an isolated Docker container whose workspace root is /workspace; never use host artifact paths or host workspace paths in commands.
+
+Editing strategy:
+- apply_patch must be a real unified git diff, not a *** Begin Patch block.
+- If apply_patch fails, recover immediately with replace_text when you know an exact unique snippet.
+- Use replace_text for small focused edits. The search field must exactly match existing file text and must be unique. Never send an empty search string.
+- Use replace_file only when you have the complete intended content for that file. Do not replace a whole file from a partial excerpt.
+- Create a checkpoint before a risky multi-file approach and restore it when abandoning that approach.
+
+Progress and recovery:
+- If a model/provider error, invalid JSON warning, rejected shell read, rejected empty replace_text, or stale/corrupt patch is reported, adjust the next action instead of repeating the same failed behavior.
+- If the exploration budget is exhausted, the next action must be apply_patch, replace_text, replace_file, inspect_diff, or finish.
+- Do not ask the user questions during the run; act from the issue text and repository evidence.
+
+Verification and finish:
+- After the final edit, inspect_diff, then run the most relevant available verification command.
+- Label commands as setup, agent, or verification.
+- Never claim a check passed unless its observed tool result says it passed.
+- Finish only after the final diff has been inspected and verification has run, or explain clearly why completion is partial.
+- Do not remove assertions, disable tests, or modify evaluator inputs to manufacture success.`;
 
 const MAX_UNCHANGED_EXPLORATION_STEPS = 6;
 const MAX_UNCHANGED_SHELL_FILE_READS = 2;
@@ -80,10 +105,10 @@ function looksLikeShellFileRead(action: Exclude<ModelAction, { type: "finish" }>
 
 function explorationRejection(action: Exclude<ModelAction, { type: "finish" }>, unchangedExplorationSteps: number): string | null {
   if (unchangedExplorationSteps >= MAX_UNCHANGED_EXPLORATION_STEPS && isExplorationAction(action)) {
-    return "Action rejected because the unchanged-code exploration limit was reached. Apply a patch, replace text, replace a file, or finish with the evidence already collected.";
+    return "Action rejected because the unchanged-code exploration limit was reached. The next action must edit or conclude: apply_patch with a unified diff, replace_text with a non-empty exact unique snippet, replace_file with complete file content, inspect_diff, or finish.";
   }
   if (unchangedExplorationSteps >= MAX_UNCHANGED_SHELL_FILE_READS && looksLikeShellFileRead(action)) {
-    return "Action rejected because shell file-printing is wasting the edit budget after prior inspection. Use read_file for bounded inspection only if the file changed; otherwise apply_patch, replace_text, or replace_file now.";
+    return "Action rejected because shell file-printing is wasting the edit budget after prior inspection. Do not repeat cat/sed/nl/head/tail. Use read_file only for a small missing range; otherwise apply_patch, replace_text with a non-empty exact unique snippet, or replace_file now.";
   }
   return null;
 }
@@ -425,7 +450,7 @@ export async function runAutonomousTask(
           result: rejection,
         });
         memory.recordObservation(decision.action, rejection);
-        memory.recordGuidance("The inspection budget for unchanged code is exhausted. The next action must be apply_patch, replace_text, replace_file, or finish. If you know an exact unique snippet, prefer replace_text; use replace_file only with complete corrected file text.");
+        memory.recordGuidance("The inspection budget for unchanged code is exhausted. The next action must be apply_patch, replace_text, replace_file, inspect_diff, or finish. Prefer replace_text for exact unique snippets; never send an empty search string; use replace_file only with complete corrected file text.");
         if (stagnationInterventions >= maxStagnationInterventions) {
           status = "partial";
           terminationReason = "Stagnation limit reached after repeated exploration without code changes.";
@@ -460,7 +485,7 @@ export async function runAutonomousTask(
       } else if (isExplorationAction(decision.action)) {
         unchangedExplorationSteps += 1;
         if (unchangedExplorationSteps === MAX_UNCHANGED_EXPLORATION_STEPS) {
-          memory.recordGuidance("You have enough inspection evidence and the unchanged-code exploration budget is exhausted. Apply a patch, replace exact text, or replace a file next; finish only if the task cannot be completed.");
+          memory.recordGuidance("You have enough inspection evidence and the unchanged-code exploration budget is exhausted. Edit next using a unified diff patch, replace_text with a non-empty exact unique snippet, or replace_file with complete content; finish only if the task cannot be completed.");
         }
       }
       if (decision.action.type === "run_command") commandsRun += 1;
