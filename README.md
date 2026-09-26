@@ -49,6 +49,17 @@ export OPENROUTER_MODEL="openai/gpt-5.2"
 
 OpenRouter is the live development provider until the organizer publishes its official transport. Override the model per run with `--model <openrouter-model-id>`. The CLI accepts either `--task` or `--task-file`, never both. If neither is supplied, it prompts only when connected to an interactive terminal; headless execution exits with an error.
 
+Direct DeepSeek runs use the OpenAI-compatible API without routing through OpenRouter:
+
+```bash
+export DEEPSEEK_API_KEY="your-deepseek-key"
+export MODEL_PROVIDER="deepseek"
+export DEEPSEEK_MODEL="deepseek-flash"
+make run
+```
+
+DeepSeek requests enable thinking with high reasoning effort and use a 120-second request timeout. Select `deepseek` in the guided wizard, or pass `--provider deepseek --model deepseek-flash` in a headless run.
+
 For a guided run, invoke the command without arguments in a terminal:
 
 ```bash

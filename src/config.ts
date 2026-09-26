@@ -19,6 +19,7 @@ export interface RunConfig {
   task: string;
   outputPath: string;
   apiKey?: string;
+  provider: "openrouter" | "deepseek";
   model: string;
   modelScriptPath?: string;
   repositoryMapEnabled: boolean;
@@ -59,6 +60,7 @@ interface RunArguments {
   maxContextChars?: string;
   modelScript?: string;
   model?: string;
+  provider?: string;
   repositoryMap?: string;
   color?: string;
 }
@@ -85,6 +87,7 @@ const OPTION_NAMES = new Map<string, keyof RunArguments>([
   ["--max-context-chars", "maxContextChars"],
   ["--model-script", "modelScript"],
   ["--model", "model"],
+  ["--provider", "provider"],
   ["--repository-map", "repositoryMap"],
   ["--color", "color"],
 ]);
@@ -192,10 +195,18 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
   const args = parseArguments(options.argv);
   const env = options.env ?? process.env;
   const cwd = options.cwd ?? process.cwd();
-  const apiKey = env.AI_API_KEY?.trim();
+  const provider = args.provider === undefined
+    ? env.MODEL_PROVIDER === "deepseek" || (!env.AI_API_KEY?.trim() && Boolean(env.DEEPSEEK_API_KEY?.trim()))
+      ? "deepseek"
+      : "openrouter"
+    : args.provider === "openrouter" || args.provider === "deepseek"
+      ? args.provider
+      : (() => { throw new ConfigurationError("--provider must be openrouter or deepseek."); })();
+  const credentialName = provider === "deepseek" ? "DEEPSEEK_API_KEY" : "AI_API_KEY";
+  const apiKey = env[credentialName]?.trim();
 
   if ((apiKey === undefined || apiKey === "") && args.modelScript === undefined) {
-    throw new ConfigurationError("AI_API_KEY is required for a run.");
+    throw new ConfigurationError(`${credentialName} is required for a ${provider} run.`);
   }
 
   const repoPath = validateRepository(args.repo, cwd);
@@ -209,11 +220,14 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
   const config: RunConfig = {
     repoPath,
     task,
+    provider,
     outputPath: resolve(
       cwd,
       args.output ?? resolve(tmpdir(), "dinner-runs", `run-${Date.now()}-${randomUUID()}`),
     ),
-    model: args.model?.trim() || env.OPENROUTER_MODEL?.trim() || "openai/gpt-5.2",
+    model: args.model?.trim() || (provider === "deepseek"
+      ? env.DEEPSEEK_MODEL?.trim() || "deepseek-flash"
+      : env.OPENROUTER_MODEL?.trim() || "openai/gpt-5.2"),
     repositoryMapEnabled: args.repositoryMap === undefined || args.repositoryMap === "disabled"
       ? false
       : args.repositoryMap === "enabled"

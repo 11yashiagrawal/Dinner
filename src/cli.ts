@@ -2,7 +2,7 @@
 
 import { ConfigurationError, loadRunConfig, toPublicRunConfig } from "./config";
 import { createAgentEventRenderer, loadFakeModelScript, runAutonomousTask } from "./agent";
-import { createOpenRouterModel } from "./model";
+import { createDeepSeekModel, createOpenRouterModel } from "./model";
 import {
   collectInteractiveRunArguments,
   InteractiveRunCancelled,
@@ -17,6 +17,7 @@ Usage:
 
 Required environment:
   AI_API_KEY                 OpenRouter API key for live development runs
+  DEEPSEEK_API_KEY           DeepSeek API key for direct DeepSeek runs
 
 Options:
   --repo <path>              Target Git repository
@@ -33,7 +34,8 @@ Options:
   --repository-map <enabled|disabled>  Add ranked source map to initial context (default: disabled)
   --color <enabled|disabled>  Terminal color; NO_COLOR disables by default
   --model-script <path>      Development-only JSON decisions for the fake model
-  --model <id>               OpenRouter model (default: openai/gpt-5.2)
+  --provider <name>          openrouter or deepseek (default: inferred from credentials)
+  --model <id>               Provider model (DeepSeek default: deepseek-flash)
   --help                     Show this help
 `;
 
@@ -92,7 +94,9 @@ export async function runCli(
 
     stdout(JSON.stringify(toPublicRunConfig(config), null, 2));
     const model = config.modelScriptPath === undefined
-      ? createOpenRouterModel({ apiKey: config.apiKey!, model: config.model })
+      ? config.provider === "deepseek"
+        ? createDeepSeekModel({ apiKey: config.apiKey!, model: config.model })
+        : createOpenRouterModel({ apiKey: config.apiKey!, model: config.model })
       : await loadFakeModelScript(config.modelScriptPath);
     const runOptions: Parameters<typeof runAutonomousTask>[0] = {
       repoPath: config.repoPath,

@@ -22,7 +22,7 @@ bun run src/cli.ts run \
   [--max-model-calls <positive-integer>]
 ```
 
-During development, OpenRouter is the live provider, selected with `--model <id>` or `OPENROUTER_MODEL`; `AI_API_KEY` holds its credential. `--model-script <path>` supplies a validated JSON array of fake-model decisions and does not require a key. Neither development transport is assumed to be the official evaluation transport.
+During development, OpenRouter and the direct DeepSeek OpenAI-compatible API are live providers. Select them with `--provider openrouter|deepseek`; their credentials are held in `AI_API_KEY` and `DEEPSEEK_API_KEY` respectively. `--model-script <path>` supplies a validated JSON array of fake-model decisions and does not require a key. Neither development transport is assumed to be the official evaluation transport.
 
 `make run` invokes the same entrypoint. When attached to an interactive terminal, a missing task may be prompted for. In a noninteractive process, missing required input is an error rather than a prompt. OpenRouter live runs are explicitly identified as development evaluation until the organizer transport is known.
 

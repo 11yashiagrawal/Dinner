@@ -147,6 +147,28 @@ describe("loadRunConfig", () => {
     expect(fromCli.model).toBe("openai/example");
   });
 
+  test("selects direct DeepSeek credentials and model", async () => {
+    const cwd = await temporaryDirectory();
+    const config = await loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it", "--provider", "deepseek"],
+      cwd,
+      env: { DEEPSEEK_API_KEY: "deep-secret" },
+    });
+    expect(config.provider).toBe("deepseek");
+    expect(config.model).toBe("deepseek-flash");
+    expect(config.apiKey).toBe("deep-secret");
+    expect(JSON.stringify(toPublicRunConfig(config))).not.toContain("deep-secret");
+  });
+
+  test("requires the credential belonging to the selected provider", async () => {
+    const cwd = await temporaryDirectory();
+    expect(loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it", "--provider", "deepseek"],
+      cwd,
+      env: { AI_API_KEY: "openrouter-only" },
+    })).rejects.toThrow("DEEPSEEK_API_KEY is required");
+  });
+
   test("honors NO_COLOR and an explicit color override", async () => {
     const cwd = await temporaryDirectory();
     const plain = await loadRunConfig({

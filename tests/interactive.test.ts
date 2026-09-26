@@ -6,7 +6,7 @@ import {
 
 describe("interactive run wizard", () => {
   test("collects a complete stepwise configuration with defaults", () => {
-    const answers = ["/repo", "@/tmp/issue.md", "", "", "", "25", "10", "/tmp/run", ""];
+    const answers = ["/repo", "@/tmp/issue.md", "", "", "", "", "25", "10", "/tmp/run", ""];
     const output: string[] = [];
     const questions: Array<[string, string | undefined]> = [];
     const argv = collectInteractiveRunArguments({
@@ -22,6 +22,7 @@ describe("interactive run wizard", () => {
     expect(argv).toEqual([
       "--repo", "/repo",
       "--task-file", "/tmp/issue.md",
+      "--provider", "openrouter",
       "--model", "example/model",
       "--repository-map", "enabled",
       "--max-steps", "40",
@@ -31,11 +32,11 @@ describe("interactive run wizard", () => {
     ]);
     expect(output.join("\n")).toContain("API key:        loaded");
     expect(output.join("\n")).not.toContain("secret");
-    expect(questions[0]).toEqual(["1/8 Repository path", undefined]);
+    expect(questions[0]).toEqual(["1/9 Repository path", undefined]);
   });
 
   test("can be cancelled before execution", () => {
-    const answers = ["/repo", "Fix it", "", "", "", "", "", "", "n"];
+    const answers = ["/repo", "Fix it", "", "", "", "", "", "", "", "n"];
     expect(() => collectInteractiveRunArguments({
       ask: () => answers.shift() ?? null,
       cwd: "/cwd",

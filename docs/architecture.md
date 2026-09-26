@@ -25,7 +25,7 @@ Parse explicit run inputs, validate environment configuration, select interactiv
 
 ### Model adapter
 
-Expose one provider-neutral request boundary returning validated actions. The implementation includes a scripted fake adapter and an OpenRouter development transport using strict JSON Schema responses. The organizer adapter can replace that transport when its protocol is confirmed. The adapter owns API timeouts, bounded transient retries, and provider-reported usage. It does not execute tools.
+Expose one provider-neutral request boundary returning validated actions. The implementation includes a scripted fake adapter, an OpenRouter development transport using strict JSON Schema responses, and a direct DeepSeek OpenAI-compatible transport. The organizer adapter can replace those transports when its protocol is confirmed. The adapter owns API timeouts, bounded transient retries, and provider-reported usage. It does not execute tools.
 
 ### Controller and state
 
