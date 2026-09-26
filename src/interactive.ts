@@ -1,3 +1,6 @@
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { homedir } from "node:os";
 import { DEFAULT_BUDGETS } from "./config";
 import { normalizeIssueUrl } from "./issue";
 import { box, renderSplash } from "./tui";
@@ -52,6 +55,71 @@ function resolveModel(provider: InteractiveProvider, answerValue: string): strin
   return answerValue.trim() || models[0];
 }
 
+function cleanPath(input: string): string {
+  return input.trim().replace(/^['"]|['"]$/g, "");
+}
+
+function expandPath(input: string, cwd: string): string {
+  const cleaned = cleanPath(input);
+  if (cleaned === "~") return homedir();
+  if (cleaned.startsWith("~/")) return join(homedir(), cleaned.slice(2));
+  return resolve(cwd, cleaned);
+}
+
+function isGitRepository(path: string): boolean {
+  try {
+    return statSync(path).isDirectory() && existsSync(join(path, ".git"));
+  } catch {
+    return false;
+  }
+}
+
+function nearestGitRepository(start: string): string | undefined {
+  let current = resolve(start);
+  while (true) {
+    if (isGitRepository(current)) return current;
+    const parent = dirname(current);
+    if (parent === current) return undefined;
+    current = parent;
+  }
+}
+
+function childGitRepositories(root: string): string[] {
+  try {
+    if (!statSync(root).isDirectory()) return [];
+    return readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .map((entry) => join(root, entry.name))
+      .filter(isGitRepository)
+      .sort((a, b) => a.localeCompare(b));
+  } catch {
+    return [];
+  }
+}
+
+export function discoverRepositoryChoices(cwd: string, env: Record<string, string | undefined> = process.env): string[] {
+  const candidates = [
+    nearestGitRepository(cwd),
+    ...childGitRepositories(cwd),
+    ...childGitRepositories(join(homedir(), "Desktop")),
+    ...childGitRepositories(join(homedir(), "Documents")),
+    ...(env.CARAMEL_REPO?.trim() ? [expandPath(env.CARAMEL_REPO, cwd)] : []),
+  ].filter((value): value is string => value !== undefined);
+  return [...new Set(candidates)].slice(0, 8);
+}
+
+function resolveRepositoryInput(input: string, choices: readonly string[], cwd: string): string {
+  const selected = input.trim();
+  const selectedIndex = Number(selected);
+  const candidate = Number.isInteger(selectedIndex) && selectedIndex >= 1 && selectedIndex <= choices.length
+    ? choices[selectedIndex - 1]
+    : expandPath(selected, cwd);
+  if (candidate === undefined || !isGitRepository(candidate)) {
+    throw new Error(`Repository must be a Git checkout. Could not use: ${candidate ?? input}`);
+  }
+  return candidate;
+}
+
 export function collectInteractiveRunArguments(options: {
   ask: TerminalPrompt;
   write?: (message: string) => void;
@@ -71,7 +139,20 @@ export function collectInteractiveRunArguments(options: {
     "Providers: DeepSeek and Qwen.",
   ], { color }));
 
-  const repo = answer(options.ask, "Repository path", options.cwd, true);
+  const repositoryChoices = discoverRepositoryChoices(options.cwd, env);
+  if (repositoryChoices.length > 0) {
+    write(box("Repository", [
+      "Choose a detected Git checkout by number, or paste/drag another path.",
+      ...repositoryChoices.map((repo, index) => `${index + 1}. ${repo}`),
+    ], { color }));
+  } else {
+    write(box("Repository", [
+      "No nearby Git checkout was detected.",
+      "Paste a path, use '.', or drag the repository folder into the terminal.",
+    ], { color }));
+  }
+  const repoInput = answer(options.ask, "Repository number or path", repositoryChoices[0] === undefined ? options.cwd : "1", true);
+  const repo = resolveRepositoryInput(repoInput, repositoryChoices, options.cwd);
   const provider = parseProvider(answer(options.ask, "Provider (deepseek/qwen)", defaultProvider(env)));
   const models = PROVIDER_MODELS[provider];
   write(box("Models", models.map((model, index) => `${index + 1}. ${model}`), { color }));
