@@ -1,0 +1,153 @@
+import { describe, expect, test } from "bun:test";
+import {
+  FakeModelAdapter,
+  ModelError,
+  ModelTransportError,
+  StructuredModelAdapter,
+  type ModelRequest,
+  type ModelTransport,
+} from "../src/model";
+
+const REQUEST: ModelRequest = {
+  messages: [{ role: "user", content: "Inspect the repository" }],
+};
+
+class ScriptedTransport implements ModelTransport {
+  calls = 0;
+
+  constructor(private readonly script: readonly (unknown | Error)[]) {}
+
+  async send(_request: ModelRequest, _signal: AbortSignal): Promise<unknown> {
+    const step = this.script[this.calls];
+    this.calls += 1;
+    if (step instanceof Error) throw step;
+    return step;
+  }
+}
+
+const SUCCESS = {
+  output: { intent: "inspect", action: { type: "list_files", path: "." } },
+  usage: { inputTokens: 8, outputTokens: 3, totalTokens: 11 },
+};
+
+describe("StructuredModelAdapter", () => {
+  test("returns a validated decision and reported usage", async () => {
+    const adapter = new StructuredModelAdapter(new ScriptedTransport([SUCCESS]));
+
+    expect(await adapter.complete(REQUEST)).toEqual({
+      decision: { intent: "inspect", action: { type: "list_files", path: "." } },
+      usage: { source: "provider", inputTokens: 8, outputTokens: 3, totalTokens: 11 },
+    });
+  });
+
+  test("retries transient failures with bounded backoff", async () => {
+    const transport = new ScriptedTransport([
+      new ModelTransportError("rate_limit", "slow down"),
+      new ModelTransportError("transient", "gateway unavailable"),
+      SUCCESS,
+    ]);
+    const delays: number[] = [];
+    const adapter = new StructuredModelAdapter(
+      transport,
+      { maxAttempts: 3, initialBackoffMs: 10, maxBackoffMs: 20 },
+      {
+        sleep: async (delay) => {
+          delays.push(delay);
+        },
+      },
+    );
+
+    const result = await adapter.complete(REQUEST);
+    expect(result.decision.action.type).toBe("list_files");
+    expect(transport.calls).toBe(3);
+    expect(delays).toEqual([10, 20]);
+  });
+
+  test("does not retry authentication errors", async () => {
+    const transport = new ScriptedTransport([
+      new ModelTransportError("authentication", "bad credential"),
+      SUCCESS,
+    ]);
+    const adapter = new StructuredModelAdapter(transport, { initialBackoffMs: 0 });
+
+    await expect(adapter.complete(REQUEST)).rejects.toMatchObject({
+      kind: "authentication",
+      retryable: false,
+      attempts: 1,
+    });
+    expect(transport.calls).toBe(1);
+  });
+
+  test("stops after the configured retry limit", async () => {
+    const transport = new ScriptedTransport([
+      new ModelTransportError("transient", "one"),
+      new ModelTransportError("transient", "two"),
+    ]);
+    const adapter = new StructuredModelAdapter(
+      transport,
+      { maxAttempts: 2, initialBackoffMs: 0 },
+      { sleep: async () => {} },
+    );
+
+    await expect(adapter.complete(REQUEST)).rejects.toMatchObject({
+      kind: "transport",
+      retryable: true,
+      attempts: 2,
+    });
+    expect(transport.calls).toBe(2);
+  });
+
+  test("times out a transport that never settles", async () => {
+    const transport: ModelTransport = {
+      send: async () => await new Promise(() => {}),
+    };
+    const adapter = new StructuredModelAdapter(transport, {
+      maxAttempts: 1,
+      requestTimeoutMs: 10,
+    });
+
+    await expect(adapter.complete(REQUEST)).rejects.toMatchObject({ kind: "timeout", attempts: 1 });
+  });
+
+  test("does not start a retry that exceeds the remaining time budget", async () => {
+    const transport = new ScriptedTransport([new ModelTransportError("rate_limit", "wait")]);
+    const adapter = new StructuredModelAdapter(
+      transport,
+      { maxAttempts: 3, initialBackoffMs: 50 },
+      { sleep: async () => {} },
+    );
+
+    await expect(adapter.complete(REQUEST, { remainingTimeMs: 20 })).rejects.toMatchObject({
+      kind: "budget_exhausted",
+      attempts: 1,
+    });
+    expect(transport.calls).toBe(1);
+  });
+
+  test("rejects malformed output without an unbounded retry", async () => {
+    const transport = new ScriptedTransport([{ output: "not-json" }, SUCCESS]);
+    const adapter = new StructuredModelAdapter(transport);
+
+    await expect(adapter.complete(REQUEST)).rejects.toMatchObject({
+      kind: "invalid_response",
+      retryable: false,
+      attempts: 1,
+    });
+    expect(transport.calls).toBe(1);
+  });
+});
+
+describe("FakeModelAdapter", () => {
+  test("returns scripted turns and records cloned requests", async () => {
+    const fake = new FakeModelAdapter([
+      {
+        decision: { action: { type: "finish", summary: "done" } },
+        usage: { source: "unavailable" },
+      },
+    ]);
+
+    expect((await fake.complete(REQUEST)).decision.action.type).toBe("finish");
+    expect(fake.requests).toEqual([REQUEST]);
+    await expect(fake.complete(REQUEST)).rejects.toBeInstanceOf(ModelError);
+  });
+});
