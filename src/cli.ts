@@ -23,6 +23,7 @@ Options:
   --verification-reserve-steps <n>  Steps protected for final checks (default: 3)
   --max-stagnation-interventions <n> Repeated-action limit (default: 2)
   --max-context-chars <n>    Approximate request character limit (default: 48000)
+  --repository-map <enabled|disabled>  Add ranked source map to initial context (default: disabled)
   --model-script <path>      Development-only JSON decisions for the fake model
   --help                     Show this help
 `;
@@ -88,6 +89,7 @@ export async function runCli(
       verificationReserveSteps: config.budgets.verificationReserveSteps,
       maxStagnationInterventions: config.budgets.maxStagnationInterventions,
       maxContextChars: config.budgets.maxContextChars,
+      repositoryMapEnabled: config.repositoryMapEnabled,
     };
     if (config.apiKey !== undefined) runOptions.apiKey = config.apiKey;
     const result = await runAutonomousTask(runOptions, {

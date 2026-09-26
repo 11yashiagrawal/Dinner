@@ -2,7 +2,7 @@
 
 Dinner is an autonomous coding harness for software-engineering tasks. It is being built in reviewable commits for the AI Harness Hackathon 2026.
 
-The current checkpoint provides the first autonomous vertical slice: validated fake-model decisions drive repository inspection, isolated edits, Docker commands, final-state verification, event recording, and patch export. The organizer-specific API transport remains pending; the CLI says this explicitly rather than guessing its protocol.
+The current checkpoint provides an autonomous vertical slice with bounded memory, repair checkpoints, final-state evidence, stagnation controls, independent benchmarks, Docker commands, and patch export. The organizer-specific API transport remains pending; the CLI says this explicitly rather than guessing its protocol.
 
 Input repositories are never edited directly. The workspace manager snapshots tracked changes, deletions, staged content, and non-ignored untracked files into a separate Git worktree. Checkpoints and final patches are calculated against that exact snapshot, so supplied changes are part of the baseline rather than mistaken for agent edits.
 
@@ -53,6 +53,8 @@ AI_API_KEY=development-placeholder bun run src/cli.ts run \
   --max-minutes 20 \
   --max-model-calls 30
 ```
+
+The experimental `--repository-map enabled` option adds bounded, ranked source-file and symbol candidates to the initial model context. It remains disabled by default: development-fixture localization improved from 0/6 metadata-only candidates to 6/6 relevant files in the top three, but this surrogate comparison does not establish a solve-rate or token improvement. The comparison and limitations are recorded in `benchmarks/reports/localization-comparison-2026-09-26.json`.
 
 If `--output` is omitted, Dinner creates a unique run beneath the operating system's temporary directory. Output must be outside the target repository.
 

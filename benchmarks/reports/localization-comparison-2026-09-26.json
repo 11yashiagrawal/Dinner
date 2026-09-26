@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-26T00:00:00.000Z",
+  "baselineRevision": "bb9ce16",
+  "feature": "bounded_repository_map",
+  "featureFlag": "--repository-map enabled",
+  "scope": "development fixtures only",
+  "tasks": 6,
+  "budget": { "maxFiles": 200, "maxLinesPerFile": 240, "maxCandidates": 12, "recallCutoff": 3 },
+  "baseline": {
+    "method": "Initial repository metadata provides manifests and test configuration but no ranked source candidates.",
+    "relevantFileRecallAt3": 0,
+    "relevantFilesFound": 0
+  },
+  "candidate": {
+    "method": "Rank bounded source reads using issue terms, file paths, and declared symbols.",
+    "relevantFileRecallAt3": 1,
+    "relevantFilesFound": 6
+  },
+  "taskResults": [
+    { "id": "ts-add", "relevantFile": "src/math.ts", "rank": 1 },
+    { "id": "py-slug", "relevantFile": "slug.py", "rank": 1 },
+    { "id": "ts-prefix", "relevantFile": "src/format.ts", "rank": 1 },
+    { "id": "py-median", "relevantFile": "stats.py", "rank": 1 },
+    { "id": "ts-clamp", "relevantFile": "src/clamp.ts", "rank": 1 },
+    { "id": "py-port", "relevantFile": "ports.py", "rank": 1 }
+  ],
+  "decision": "Retain behind a disabled-by-default feature flag until real-model paired runs establish end-to-end benefit.",
+  "limitations": [
+    "This measures relevant-file recall, not task solve rate.",
+    "The six repositories are small, so the result does not establish performance on large repositories.",
+    "Held-out tasks and their solution patches were excluded from this comparison.",
+    "No token, runtime, or regression improvement is claimed without organizer model runs."
+  ]
+}

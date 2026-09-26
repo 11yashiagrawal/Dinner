@@ -120,6 +120,7 @@ async function runWithScript(options: {
   maxContextChars?: number;
   verificationReserveSteps?: number;
   maxStagnationInterventions?: number;
+  repositoryMapEnabled?: boolean;
 }) {
   const parent = await temporaryDirectory("dinner-agent-output-");
   const outputPath = join(parent, "run");
@@ -136,6 +137,7 @@ async function runWithScript(options: {
       ...(options.maxContextChars === undefined ? {} : { maxContextChars: options.maxContextChars }),
       ...(options.verificationReserveSteps === undefined ? {} : { verificationReserveSteps: options.verificationReserveSteps }),
       ...(options.maxStagnationInterventions === undefined ? {} : { maxStagnationInterventions: options.maxStagnationInterventions }),
+      ...(options.repositoryMapEnabled === undefined ? {} : { repositoryMapEnabled: options.repositoryMapEnabled }),
     },
     {
       model,
@@ -404,5 +406,15 @@ describe("autonomous agent vertical slice", () => {
     expect(result.metrics.verificationReserveActivations).toBe(1);
     expect(result.metrics.steps).toBe(5);
     expect(model.requests[3]?.messages.at(-1)?.content).toContain("Verification reserve is active");
+  });
+
+  test("includes the bounded repository map only when enabled", async () => {
+    const source = await codingFixture();
+    const { model } = await runWithScript({
+      source,
+      repositoryMapEnabled: true,
+      script: [turn({ type: "finish", summary: "Map inspected." })],
+    });
+    expect(model.requests[0]?.messages[1]?.content).toContain('"path":"src/math.ts"');
   });
 });

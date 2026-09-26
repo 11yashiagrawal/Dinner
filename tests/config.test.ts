@@ -33,6 +33,7 @@ describe("loadRunConfig", () => {
     expect(config.repoPath).toBe(cwd);
     expect(config.task).toBe("Fix the bug");
     expect(config.budgets).toEqual(DEFAULT_BUDGETS);
+    expect(config.repositoryMapEnabled).toBeFalse();
   });
 
   test("reads a task file", async () => {
@@ -118,6 +119,16 @@ describe("loadRunConfig", () => {
       cwd,
       env: { AI_API_KEY: "secret" },
     })).rejects.toThrow("must be smaller than --max-steps");
+  });
+
+  test("enables the bounded repository map explicitly", async () => {
+    const cwd = await temporaryDirectory();
+    const config = await loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it", "--repository-map", "enabled"],
+      cwd,
+      env: { AI_API_KEY: "secret" },
+    });
+    expect(config.repositoryMapEnabled).toBeTrue();
   });
 
   test("omits the credential from public configuration", async () => {

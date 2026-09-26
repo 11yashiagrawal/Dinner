@@ -7,7 +7,7 @@ import {
   type ModelAdapter,
 } from "../model";
 import { RepositoryReadCache, TaskMemory } from "../memory";
-import { RepositoryTools } from "../tools";
+import { buildRepositoryMap, RepositoryTools } from "../tools";
 import { createEvidence, discoverChecks, evidenceForFinalState, type VerificationEvidence } from "../verification";
 import { classifyCommandFailure, commandFailureDetail, type FailureKind, type FailureRecord } from "../recovery";
 import { IsolatedWorkspace, type WorkspaceCheckpoint, type WorkspaceState } from "../workspace";
@@ -33,6 +33,7 @@ export interface AutonomousRunOptions {
   maxContextChars?: number;
   verificationReserveSteps?: number;
   maxStagnationInterventions?: number;
+  repositoryMapEnabled?: boolean;
   apiKey?: string;
 }
 
@@ -234,7 +235,10 @@ export async function runAutonomousTask(
   )(workspace.workspacePath, checksPath);
   const metadata = await repository.metadata();
   const discoveredChecks = metadata.ok ? discoverChecks(metadata.value) : [];
-  const memory = new TaskMemory(SYSTEM_PROMPT, options.task, { metadata, discoveredChecks }, {
+  const repositoryMap = options.repositoryMapEnabled === true
+    ? await buildRepositoryMap({ repository, task: options.task })
+    : null;
+  const memory = new TaskMemory(SYSTEM_PROMPT, options.task, { metadata, discoveredChecks, repositoryMap }, {
     ...(options.maxContextChars === undefined ? {} : { maxContextChars: options.maxContextChars }),
   });
   const readCache = new RepositoryReadCache();

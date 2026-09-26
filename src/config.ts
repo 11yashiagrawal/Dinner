@@ -20,6 +20,7 @@ export interface RunConfig {
   outputPath: string;
   apiKey?: string;
   modelScriptPath?: string;
+  repositoryMapEnabled: boolean;
   budgets: {
     maxSteps: number;
     maxMinutes: number;
@@ -55,6 +56,7 @@ interface RunArguments {
   maxStagnationInterventions?: string;
   maxContextChars?: string;
   modelScript?: string;
+  repositoryMap?: string;
 }
 
 export interface LoadRunConfigOptions {
@@ -78,6 +80,7 @@ const OPTION_NAMES = new Map<string, keyof RunArguments>([
   ["--max-stagnation-interventions", "maxStagnationInterventions"],
   ["--max-context-chars", "maxContextChars"],
   ["--model-script", "modelScript"],
+  ["--repository-map", "repositoryMap"],
 ]);
 
 function parseArguments(argv: string[]): RunArguments {
@@ -204,6 +207,11 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
       cwd,
       args.output ?? resolve(tmpdir(), "dinner-runs", `run-${Date.now()}-${randomUUID()}`),
     ),
+    repositoryMapEnabled: args.repositoryMap === undefined || args.repositoryMap === "disabled"
+      ? false
+      : args.repositoryMap === "enabled"
+        ? true
+        : (() => { throw new ConfigurationError("--repository-map must be enabled or disabled."); })(),
     budgets: {
       maxSteps: positiveInteger(args.maxSteps, DEFAULT_BUDGETS.maxSteps, "--max-steps"),
       maxMinutes: positiveNumber(args.maxMinutes, DEFAULT_BUDGETS.maxMinutes, "--max-minutes"),
