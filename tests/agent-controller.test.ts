@@ -116,6 +116,7 @@ async function runWithScript(options: {
   source: string;
   script: readonly (ModelTurn | Error)[];
   maxSteps?: number;
+  maxRepairAttempts?: number;
 }) {
   const parent = await temporaryDirectory("dinner-agent-output-");
   const outputPath = join(parent, "run");
@@ -128,6 +129,7 @@ async function runWithScript(options: {
       maxSteps: options.maxSteps ?? 10,
       maxMinutes: 2,
       maxModelCalls: 10,
+      ...(options.maxRepairAttempts === undefined ? {} : { maxRepairAttempts: options.maxRepairAttempts }),
     },
     {
       model,
@@ -277,5 +279,56 @@ describe("autonomous agent vertical slice", () => {
     });
     expect(result.status).toBe("partial");
     expect(result.verification.evidence[0]?.status).toBe("unknown");
+  });
+
+  test("records a failed hypothesis, restores its checkpoint, and verifies a repair", async () => {
+    const source = await codingFixture();
+    const wrongPatch = FIX_PATCH.replace("+  return a + b;", "+  return a * b;");
+    const { result } = await runWithScript({
+      source,
+      script: [
+        turn({ type: "create_checkpoint", label: "before multiplication hypothesis" }),
+        turn({ type: "apply_patch", patch: wrongPatch }, "The operator should be multiplication."),
+        turn({ type: "run_command", command: "bun test", purpose: "verification" }, "Test multiplication hypothesis."),
+        turn({ type: "restore_checkpoint", checkpointId: "latest" }, "Abandon multiplication hypothesis."),
+        turn({ type: "apply_patch", patch: FIX_PATCH }, "Addition needs the plus operator."),
+        turn({ type: "run_command", command: "bun test", purpose: "verification" }),
+        turn({ type: "inspect_diff" }),
+        turn({ type: "finish", summary: "Repaired after one failed hypothesis." }),
+      ],
+    });
+    expect(result.status).toBe("verified");
+    expect(result.recovery).toMatchObject({ repairAttempts: 1, checkpointsCreated: 1, checkpointsRestored: 1 });
+    expect(result.recovery.failures[0]).toMatchObject({ kind: "test", hypothesis: "Test multiplication hypothesis." });
+  });
+
+  test("stops after the bounded number of code-related failures", async () => {
+    const source = await codingFixture();
+    const wrongPatch = FIX_PATCH.replace("+  return a + b;", "+  return a * b;");
+    const { result } = await runWithScript({
+      source,
+      maxRepairAttempts: 2,
+      script: [
+        turn({ type: "apply_patch", patch: wrongPatch }),
+        turn({ type: "run_command", command: "bun test", purpose: "verification" }),
+        turn({ type: "run_command", command: "bun test", purpose: "verification" }),
+      ],
+    });
+    expect(result.status).toBe("partial");
+    expect(result.terminationReason).toContain("Repair limit reached");
+    expect(result.recovery.repairAttempts).toBe(2);
+  });
+
+  test("records setup failure without charging the code repair limit", async () => {
+    const source = await codingFixture();
+    const { result } = await runWithScript({
+      source,
+      script: [
+        turn({ type: "run_command", command: "exit 2", purpose: "setup" }),
+        turn({ type: "finish", summary: "Setup unavailable." }),
+      ],
+    });
+    expect(result.recovery.repairAttempts).toBe(0);
+    expect(result.recovery.failures[0]).toMatchObject({ kind: "setup", countsAgainstRepairLimit: false });
   });
 });

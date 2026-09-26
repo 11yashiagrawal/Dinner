@@ -1,6 +1,7 @@
 import type { CommandRequest, CommandResult } from "../execution";
 import type { ModelUsage } from "../model";
 import type { DiscoveredCheck, VerificationEvidence } from "../verification";
+import type { RecoverySummary } from "../recovery";
 
 export type AgentStatus = "verified" | "partial" | "blocked" | "budget_exhausted" | "failed";
 
@@ -48,6 +49,7 @@ export interface AgentRunResult {
     evidence: VerificationEvidence[];
     lastResult: CommandResult | null;
   };
+  recovery: RecoverySummary;
   metrics: {
     steps: number;
     modelCalls: number;

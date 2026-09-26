@@ -9,7 +9,8 @@ import {
 } from "../model";
 import { RepositoryTools } from "../tools";
 import { createEvidence, discoverChecks, evidenceForFinalState, type VerificationEvidence } from "../verification";
-import { IsolatedWorkspace, type WorkspaceState } from "../workspace";
+import { classifyCommandFailure, commandFailureDetail, type FailureKind, type FailureRecord } from "../recovery";
+import { IsolatedWorkspace, type WorkspaceCheckpoint, type WorkspaceState } from "../workspace";
 import { AgentEventWriter } from "./events";
 import {
   emptyUsageSummary,
@@ -27,6 +28,7 @@ export interface AutonomousRunOptions {
   maxSteps: number;
   maxMinutes: number;
   maxModelCalls: number;
+  maxRepairAttempts?: number;
   apiKey?: string;
 }
 
@@ -44,13 +46,14 @@ export interface AutonomousRunDependencies {
 interface ToolObservation {
   result: unknown;
   verification?: CommandResult;
+  failure?: { kind: FailureKind; detail: string };
   workspaceChanged: boolean;
 }
 
 const SYSTEM_PROMPT = `You are an autonomous coding agent. Choose exactly one structured action per turn.
-Inspect before editing. Use unified Git patches for apply_patch. Commands run in an isolated Docker container.
+Inspect before editing. Use unified Git patches for apply_patch. Create a checkpoint before a risky approach and restore it when abandoning that approach. Commands run in an isolated Docker container.
 Label commands as setup, agent, or verification. Before finish, inspect the diff and run a relevant verification command after the final edit.
-Never claim a check passed unless its observed tool result says it passed.`;
+Never claim a check passed unless its observed tool result says it passed. Do not remove assertions, disable tests, or modify evaluator inputs to manufacture success.`;
 
 function initialUserMessage(task: string, metadata: unknown, checks: unknown): string {
   return `Task:\n${task}\n\nRepository metadata:\n${JSON.stringify(metadata, null, 2)}\n\nLikely checks discovered by the harness:\n${JSON.stringify(checks, null, 2)}`;
@@ -71,12 +74,14 @@ async function dispatchAction(options: {
   repository: RepositoryTools;
   workspace: IsolatedWorkspace;
   commandExecutor: CommandExecutor;
+  checkpoints: Map<string, WorkspaceCheckpoint>;
   remainingTimeMs: number;
 }): Promise<ToolObservation> {
   const { action, repository, workspace, commandExecutor } = options;
   const before = await currentState(workspace);
   let result: unknown;
   let verification: CommandResult | undefined;
+  let failure: ToolObservation["failure"];
 
   switch (action.type) {
     case "list_files":
@@ -102,9 +107,44 @@ async function dispatchAction(options: {
     case "inspect_diff":
       result = await repository.inspectDiff();
       break;
-    case "apply_patch":
-      result = await workspace.applyPatch(action.patch);
+    case "apply_patch": {
+      const application = await workspace.applyPatch(action.patch);
+      result = application;
+      if (!application.ok) failure = { kind: "patch", detail: application.error.message };
       break;
+    }
+    case "create_checkpoint": {
+      const checkpoint = await workspace.createCheckpoint(action.label);
+      if (checkpoint.ok) {
+        options.checkpoints.set(checkpoint.value.id, checkpoint.value);
+        result = {
+          ok: true,
+          value: {
+            id: checkpoint.value.id,
+            label: checkpoint.value.label,
+            changedFiles: checkpoint.value.changedFiles,
+          },
+        };
+      } else {
+        result = checkpoint;
+        failure = { kind: "tool", detail: checkpoint.error.message };
+      }
+      break;
+    }
+    case "restore_checkpoint": {
+      const checkpoint = action.checkpointId === "latest"
+        ? [...options.checkpoints.values()].at(-1)
+        : options.checkpoints.get(action.checkpointId);
+      if (checkpoint === undefined) {
+        result = { ok: false, error: { code: "CHECKPOINT_INVALID", message: "Unknown checkpoint ID." } };
+        failure = { kind: "tool", detail: "Unknown checkpoint ID." };
+      } else {
+        const restoration = await workspace.restoreCheckpoint(checkpoint);
+        result = restoration;
+        if (!restoration.ok) failure = { kind: "tool", detail: restoration.error.message };
+      }
+      break;
+    }
     case "run_command": {
       const requestedTimeout = action.timeoutMs ?? options.remainingTimeMs;
       const commandResult = await commandExecutor.run({
@@ -115,6 +155,8 @@ async function dispatchAction(options: {
       });
       result = commandResult;
       if (commandResult.purpose === "verification") verification = commandResult;
+      const kind = classifyCommandFailure(commandResult);
+      if (kind !== null) failure = { kind, detail: commandFailureDetail(commandResult) };
       break;
     }
   }
@@ -124,6 +166,7 @@ async function dispatchAction(options: {
     result,
     workspaceChanged: before.patchSha256 !== after.patchSha256,
     ...(verification === undefined ? {} : { verification }),
+    ...(failure === undefined ? {} : { failure }),
   };
 }
 
@@ -145,6 +188,10 @@ export async function runAutonomousTask(
   }
   if (!Number.isFinite(options.maxMinutes) || options.maxMinutes <= 0) {
     throw new Error("maxMinutes must be positive.");
+  }
+  const maxRepairAttempts = options.maxRepairAttempts ?? 4;
+  if (!Number.isInteger(maxRepairAttempts) || maxRepairAttempts <= 0) {
+    throw new Error("maxRepairAttempts must be a positive integer.");
   }
   const now = dependencies.now ?? Date.now;
   const startedAt = now();
@@ -177,6 +224,11 @@ export async function runAutonomousTask(
     { role: "user", content: initialUserMessage(options.task, metadata, discoveredChecks) },
   ];
   const usage = emptyUsageSummary();
+  const checkpoints = new Map<string, WorkspaceCheckpoint>();
+  const failures: FailureRecord[] = [];
+  let repairAttempts = 0;
+  let checkpointsCreated = 0;
+  let checkpointsRestored = 0;
   let steps = 0;
   let modelCalls = 0;
   let verificationCommands = 0;
@@ -237,6 +289,15 @@ export async function runAutonomousTask(
         message: modelError.message,
         attempts: modelError.attempts,
       });
+      failures.push({
+        sequence: failures.length + 1,
+        kind: "model",
+        hypothesis: null,
+        action: "model_call",
+        detail: `${modelError.kind}: ${modelError.message}`,
+        codeFingerprint: (await currentState(workspace)).patchSha256,
+        countsAgainstRepairLimit: false,
+      });
       if (modelError.kind === "invalid_response" && modelCalls < options.maxModelCalls) {
         messages.push({
           role: "user",
@@ -279,6 +340,7 @@ export async function runAutonomousTask(
         repository,
         workspace,
         commandExecutor,
+        checkpoints,
         remainingTimeMs: Math.max(1, deadline - now()),
       });
       if (observation.workspaceChanged) {
@@ -287,6 +349,12 @@ export async function runAutonomousTask(
       }
       if (decision.action.type === "inspect_diff") {
         diffReviewedPatchSha = (await currentState(workspace)).patchSha256;
+      }
+      if (decision.action.type === "create_checkpoint" && observation.failure === undefined) {
+        checkpointsCreated += 1;
+      }
+      if (decision.action.type === "restore_checkpoint" && observation.failure === undefined) {
+        checkpointsRestored += 1;
       }
       if (observation.verification !== undefined) {
         verificationCommands += 1;
@@ -307,9 +375,38 @@ export async function runAutonomousTask(
         workspaceChanged: observation.workspaceChanged,
         result: observation.result,
       });
+      if (observation.failure !== undefined) {
+        const state = await currentState(workspace);
+        const countsAgainstRepairLimit =
+          observation.failure.kind === "test" || observation.failure.kind === "patch";
+        if (countsAgainstRepairLimit) repairAttempts += 1;
+        failures.push({
+          sequence: failures.length + 1,
+          kind: observation.failure.kind,
+          hypothesis: decision.intent ?? null,
+          action: decision.action.type,
+          detail: observation.failure.detail,
+          codeFingerprint: state.patchSha256,
+          countsAgainstRepairLimit,
+        });
+        if (repairAttempts >= maxRepairAttempts) {
+          status = "partial";
+          terminationReason = `Repair limit reached after ${repairAttempts} code-related failures.`;
+          break;
+        }
+      }
       messages.push({ role: "user", content: observationMessage(decision.action, observation.result) });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
+      failures.push({
+        sequence: failures.length + 1,
+        kind: "tool",
+        hypothesis: decision.intent ?? null,
+        action: decision.action.type,
+        detail,
+        codeFingerprint: (await currentState(workspace)).patchSha256,
+        countsAgainstRepairLimit: false,
+      });
       await events.write("tool_result", {
         action: decision.action.type,
         workspaceChanged: false,
@@ -356,6 +453,13 @@ export async function runAutonomousTask(
       discoveredChecks,
       evidence: verificationEvidence,
       lastResult: lastVerification,
+    },
+    recovery: {
+      maxRepairAttempts,
+      repairAttempts,
+      failures,
+      checkpointsCreated,
+      checkpointsRestored,
     },
     metrics: {
       steps,

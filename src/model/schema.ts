@@ -95,6 +95,13 @@ function parseAction(value: unknown): ModelAction {
     }
     case "apply_patch":
       return { type: "apply_patch", patch: requiredString(action.patch, "action.patch") };
+    case "create_checkpoint":
+      return { type: "create_checkpoint", label: requiredString(action.label, "action.label") };
+    case "restore_checkpoint":
+      return {
+        type: "restore_checkpoint",
+        checkpointId: requiredString(action.checkpointId, "action.checkpointId"),
+      };
     case "run_command": {
       const result: {
         type: "run_command";
