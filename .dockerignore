@@ -1,0 +1,5 @@
+.git
+.harness-runs
+.env
+node_modules
+coverage

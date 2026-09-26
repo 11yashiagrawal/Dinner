@@ -106,7 +106,10 @@ function failure(error: unknown): RepositoryToolResult<never> {
 
 function isInside(root: string, candidate: string): boolean {
   const pathFromRoot = relative(root, candidate);
-  return pathFromRoot === "" || (!pathFromRoot.startsWith(`..${sep}`) && !isAbsolute(pathFromRoot));
+  return (
+    pathFromRoot === "" ||
+    (pathFromRoot !== ".." && !pathFromRoot.startsWith(`..${sep}`) && !isAbsolute(pathFromRoot))
+  );
 }
 
 function positiveInteger(value: number, name: string): number {

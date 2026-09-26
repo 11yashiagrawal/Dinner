@@ -67,6 +67,10 @@ describe("RepositoryTools paths and listing", () => {
     await symlink(join(outside, "secret.txt"), join(root, "escaped.txt"));
     const tools = await RepositoryTools.create(root);
 
+    expect(await tools.listFiles({ path: ".." })).toMatchObject({
+      ok: false,
+      error: { code: "PATH_ESCAPE" },
+    });
     expect(await tools.readFile({ path: "../secret.txt" })).toMatchObject({
       ok: false,
       error: { code: "PATH_ESCAPE" },

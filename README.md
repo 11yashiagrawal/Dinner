@@ -2,7 +2,7 @@
 
 Dinner is an autonomous coding harness for software-engineering tasks. It is being built in reviewable commits for the AI Harness Hackathon 2026.
 
-The current checkpoint provides the TypeScript/Bun skeleton, validates CLI inputs and structured model actions, and offers bounded read-only repository inspection. The organizer-specific API transport, editing, command execution, and verification arrive in later commits; the CLI says this explicitly rather than pretending to run an agent.
+The current checkpoint provides the TypeScript/Bun skeleton, validates CLI inputs and structured model actions, offers bounded read-only repository inspection, and executes target commands in disposable Docker containers. The organizer-specific API transport, editing, and verification arrive in later commits; the CLI says this explicitly rather than pretending to run an agent.
 
 ## Requirements
 
@@ -58,5 +58,14 @@ AI_API_KEY=development-placeholder bun run src/cli.ts run \
 make test
 make check
 ```
+
+Build and test the command-execution container when Docker is running:
+
+```bash
+make runner-image
+make test-docker
+```
+
+Each target command receives one unprivileged, read-only-root container with CPU, memory, process, time, preview, and log limits. Only the target workspace is mounted read-write. The container has network access, but model credentials are never injected. Docker reduces host exposure; it is not claimed as a complete security boundary.
 
 Architecture and provisional evaluator assumptions are documented in [docs/architecture.md](docs/architecture.md) and [docs/contract.md](docs/contract.md).
