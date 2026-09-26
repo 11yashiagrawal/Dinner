@@ -1,8 +1,10 @@
 #!/usr/bin/env bun
 
+import { readFile } from "node:fs/promises";
 import { ConfigurationError, loadRunConfig, toPublicRunConfig } from "./config";
 import { createAgentEventRenderer, loadFakeModelScript, runAutonomousTask } from "./agent";
 import { createDeepSeekModel, createOpenRouterModel } from "./model";
+import { fetchGitHubIssueTask, type IssueFetcher } from "./issue";
 import {
   collectInteractiveRunArguments,
   InteractiveRunCancelled,
@@ -13,6 +15,7 @@ export const HELP = `Dinner — autonomous coding harness
 
 Usage:
   bun run src/cli.ts run --repo <path> (--task <text> | --task-file <path>) [options]
+  bun run src/cli.ts run --repo <path> --issue <github-issue-url> [options]
   bun run src/cli.ts run                    Start the guided terminal wizard
 
 Required environment:
@@ -23,21 +26,66 @@ Options:
   --repo <path>              Target Git repository
   --task <text>              Software-engineering task
   --task-file <path>         Read the task from a UTF-8 file
+  --issue <url>              Fetch a GitHub issue and use it as the task
   --output <path>            Artifact directory (default: unique OS temporary directory)
-  --max-steps <integer>      Maximum agent actions (default: 40)
+  --max-steps <integer>      Maximum agent actions (default: 32)
   --max-minutes <number>     Wall-clock limit in minutes (default: 20)
-  --max-model-calls <int>    Maximum model calls (default: 30)
+  --max-model-calls <int>    Maximum model calls (default: 18)
   --max-repair-attempts <n>  Maximum code-related failures (default: 4)
   --verification-reserve-steps <n>  Steps protected for final checks (default: 3)
   --max-stagnation-interventions <n> Repeated-action limit (default: 2)
-  --max-context-chars <n>    Approximate request character limit (default: 48000)
+  --max-context-chars <n>    Approximate request character limit (default: 32000)
   --repository-map <enabled|disabled>  Add ranked source map to initial context (default: disabled)
   --color <enabled|disabled>  Terminal color; NO_COLOR disables by default
   --model-script <path>      Development-only JSON decisions for the fake model
   --provider <name>          openrouter or deepseek (default: inferred from credentials)
   --model <id>               Provider model (DeepSeek default: deepseek-flash)
+  --reasoning-effort <level> DeepSeek reasoning effort: low, medium, high (default: medium)
   --help                     Show this help
 `;
+
+async function runGitApplyCheck(repoPath: string, patch: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const check = Bun.spawnSync(["git", "apply", "--check", "--binary", "--whitespace=nowarn", "-"], {
+    cwd: repoPath,
+    stdin: Buffer.from(patch),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (check.exitCode !== 0) return { ok: false, error: check.stderr.toString().trim() || "Patch does not apply." };
+  const applied = Bun.spawnSync(["git", "apply", "--binary", "--whitespace=nowarn", "-"], {
+    cwd: repoPath,
+    stdin: Buffer.from(patch),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (applied.exitCode !== 0) return { ok: false, error: applied.stderr.toString().trim() || "Patch application failed." };
+  return { ok: true };
+}
+
+async function maybeOfferPatchApplication(options: {
+  interactive: boolean;
+  ask: TerminalPrompt;
+  stdout: (message: string) => void;
+  repoPath: string;
+  patchPath: string;
+  changedFiles: readonly string[];
+}): Promise<void> {
+  if (!options.interactive || options.changedFiles.length === 0) return;
+  options.stdout(`\nPatch ready: ${options.patchPath}`);
+  options.stdout(`Changed files: ${options.changedFiles.join(", ")}`);
+  const answer = options.ask("Apply this patch to the source repo now? (y/N)", "N")?.trim().toLowerCase() ?? "";
+  if (answer !== "y" && answer !== "yes") {
+    options.stdout("Patch left unapplied. You can inspect patch.diff and apply it later.");
+    return;
+  }
+  const patch = await readFile(options.patchPath, "utf8");
+  const applied = await runGitApplyCheck(options.repoPath, patch);
+  if (applied.ok) {
+    options.stdout("Patch applied to the source repo.");
+  } else {
+    options.stdout(`Patch was not applied: ${applied.error}`);
+  }
+}
 
 export async function runCli(
   argv: string[],
@@ -47,6 +95,7 @@ export async function runCli(
     interactive?: boolean;
     promptForTask?: () => string | null;
     prompt?: TerminalPrompt;
+    issueFetcher?: IssueFetcher;
     stdout?: (message: string) => void;
     stderr?: (message: string) => void;
   } = {},
@@ -86,6 +135,7 @@ export async function runCli(
       argv: commandArgs,
       interactive,
       promptForTask: dependencies.promptForTask ?? (() => prompt("Task: ")),
+      issueFetcher: dependencies.issueFetcher ?? fetchGitHubIssueTask,
     };
     if (dependencies.env !== undefined) configOptions.env = dependencies.env;
     if (dependencies.cwd !== undefined) configOptions.cwd = dependencies.cwd;
@@ -95,7 +145,11 @@ export async function runCli(
     stdout(JSON.stringify(toPublicRunConfig(config), null, 2));
     const model = config.modelScriptPath === undefined
       ? config.provider === "deepseek"
-        ? createDeepSeekModel({ apiKey: config.apiKey!, model: config.model })
+        ? createDeepSeekModel({
+            apiKey: config.apiKey!,
+            model: config.model,
+            ...(config.reasoningEffort === undefined ? {} : { reasoningEffort: config.reasoningEffort }),
+          })
         : createOpenRouterModel({ apiKey: config.apiKey!, model: config.model })
       : await loadFakeModelScript(config.modelScriptPath);
     const runOptions: Parameters<typeof runAutonomousTask>[0] = {
@@ -117,6 +171,14 @@ export async function runCli(
       onEvent: createAgentEventRenderer(stdout, { color: config.colorEnabled }),
     });
     stdout(JSON.stringify(result, null, 2));
+    await maybeOfferPatchApplication({
+      interactive,
+      ask,
+      stdout,
+      repoPath: config.repoPath,
+      patchPath: result.patchPath,
+      changedFiles: result.changedFiles,
+    });
     if (result.status === "verified") return 0;
     if (result.status === "partial") return 3;
     if (result.status === "blocked") return 4;

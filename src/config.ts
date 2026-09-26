@@ -3,16 +3,19 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
+import { type IssueFetcher, formatIssueTask } from "./issue";
 
 export const DEFAULT_BUDGETS = {
-  maxSteps: 40,
+  maxSteps: 32,
   maxMinutes: 20,
-  maxModelCalls: 30,
+  maxModelCalls: 18,
   maxRepairAttempts: 4,
   verificationReserveSteps: 3,
   maxStagnationInterventions: 2,
-  maxContextChars: 48_000,
+  maxContextChars: 32_000,
 } as const;
+
+export type DeepSeekReasoningEffort = "low" | "medium" | "high";
 
 export interface RunConfig {
   repoPath: string;
@@ -21,6 +24,7 @@ export interface RunConfig {
   apiKey?: string;
   provider: "openrouter" | "deepseek";
   model: string;
+  reasoningEffort?: DeepSeekReasoningEffort;
   modelScriptPath?: string;
   repositoryMapEnabled: boolean;
   colorEnabled: boolean;
@@ -50,6 +54,7 @@ interface RunArguments {
   repo?: string;
   task?: string;
   taskFile?: string;
+  issue?: string;
   output?: string;
   maxSteps?: string;
   maxMinutes?: string;
@@ -60,6 +65,7 @@ interface RunArguments {
   maxContextChars?: string;
   modelScript?: string;
   model?: string;
+  reasoningEffort?: string;
   provider?: string;
   repositoryMap?: string;
   color?: string;
@@ -71,12 +77,14 @@ export interface LoadRunConfigOptions {
   cwd?: string;
   interactive?: boolean;
   promptForTask?: () => string | null;
+  issueFetcher?: IssueFetcher;
 }
 
 const OPTION_NAMES = new Map<string, keyof RunArguments>([
   ["--repo", "repo"],
   ["--task", "task"],
   ["--task-file", "taskFile"],
+  ["--issue", "issue"],
   ["--output", "output"],
   ["--max-steps", "maxSteps"],
   ["--max-minutes", "maxMinutes"],
@@ -87,6 +95,7 @@ const OPTION_NAMES = new Map<string, keyof RunArguments>([
   ["--max-context-chars", "maxContextChars"],
   ["--model-script", "modelScript"],
   ["--model", "model"],
+  ["--reasoning-effort", "reasoningEffort"],
   ["--provider", "provider"],
   ["--repository-map", "repositoryMap"],
   ["--color", "color"],
@@ -177,14 +186,23 @@ function resolveProvider(args: RunArguments, env: Record<string, string | undefi
     : "openrouter";
 }
 
+function validateReasoningEffort(value: string | undefined): DeepSeekReasoningEffort | undefined {
+  if (value === undefined || value.trim() === "") return undefined;
+  const effort = value.trim();
+  if (effort === "low" || effort === "medium" || effort === "high") return effort;
+  throw new ConfigurationError("--reasoning-effort must be low, medium, or high.");
+}
+
 async function resolveTask(
   args: RunArguments,
   cwd: string,
   interactive: boolean,
   promptForTask?: () => string | null,
+  issueFetcher?: IssueFetcher,
 ): Promise<string> {
-  if (args.task !== undefined && args.taskFile !== undefined) {
-    throw new ConfigurationError("Use either --task or --task-file, not both.");
+  const suppliedTaskInputs = [args.task, args.taskFile, args.issue].filter((value) => value !== undefined);
+  if (suppliedTaskInputs.length > 1) {
+    throw new ConfigurationError("Use only one of --task, --task-file, or --issue.");
   }
 
   let task = args.task;
@@ -196,6 +214,12 @@ async function resolveTask(
       const detail = error instanceof Error ? error.message : String(error);
       throw new ConfigurationError(`Unable to read task file ${taskPath}: ${detail}`);
     }
+  }
+  if (args.issue !== undefined) {
+    if (issueFetcher === undefined) {
+      throw new ConfigurationError("--issue requires an issue fetcher in this process.");
+    }
+    task = formatIssueTask(await issueFetcher(args.issue));
   }
 
   if ((task === undefined || task.trim() === "") && interactive) {
@@ -215,6 +239,8 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
   const env = options.env ?? process.env;
   const cwd = options.cwd ?? process.cwd();
   const provider = resolveProvider(args, env);
+  const reasoningEffort = validateReasoningEffort(args.reasoningEffort ?? env.DEEPSEEK_REASONING_EFFORT) ??
+    (provider === "deepseek" ? "medium" : undefined);
   const credentialName = provider === "deepseek" ? "DEEPSEEK_API_KEY" : "AI_API_KEY";
   const apiKey = env[credentialName]?.trim();
 
@@ -228,12 +254,14 @@ export async function loadRunConfig(options: LoadRunConfigOptions): Promise<RunC
     cwd,
     options.interactive ?? false,
     options.promptForTask,
+    options.issueFetcher,
   );
 
   const config: RunConfig = {
     repoPath,
     task,
     provider,
+    ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
     outputPath: resolve(
       cwd,
       args.output ?? resolve(tmpdir(), "dinner-runs", `run-${Date.now()}-${randomUUID()}`),

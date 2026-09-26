@@ -33,10 +33,10 @@ export function collectInteractiveRunArguments(options: {
 
   write("\nDinner interactive run");
   write("Enter each value in order. Press Return to accept a value shown in [brackets].");
-  write("For a task file, enter @ followed by its path, for example @/tmp/issue.md.\n");
+  write("For a GitHub issue, paste its URL. For a task file, enter @ followed by its path.\n");
 
   const repo = answer(options.ask, "1/9 Repository path", undefined, true);
-  const taskInput = answer(options.ask, "2/9 Task or @task-file", undefined, true);
+  const taskInput = answer(options.ask, "2/9 GitHub issue URL, task, or @task-file", undefined, true);
   const defaultProvider = env.DEEPSEEK_API_KEY?.trim() ? "deepseek" : "openrouter";
   const provider = answer(options.ask, "3/9 Model provider (deepseek/openrouter)", defaultProvider);
   const model = answer(
@@ -62,6 +62,8 @@ export function collectInteractiveRunArguments(options: {
 
   const taskArguments = taskInput.startsWith("@")
     ? ["--task-file", taskInput.slice(1)]
+    : /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/\d+/.test(taskInput)
+      ? ["--issue", taskInput]
     : ["--task", taskInput];
   const argv = [
     "--repo", repo,

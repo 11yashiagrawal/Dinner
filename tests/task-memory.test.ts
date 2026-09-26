@@ -36,6 +36,33 @@ describe("TaskMemory", () => {
     expect(messages.map(({ role }) => role)).toEqual(["system", "user", "assistant", "user"]);
     expect(messages.at(-1)?.content).toContain("missing action");
   });
+
+  test("compacts large read observations before keeping them in context", () => {
+    const memory = new TaskMemory("system", "task", {}, {
+      maxContextChars: 4_000,
+      reserveResponseChars: 500,
+      maxEntryChars: 1_200,
+    });
+    memory.recordDecision({ action: { type: "read_file", path: "src/big.ts" } });
+    memory.recordObservation(
+      { type: "read_file", path: "src/big.ts" },
+      {
+        ok: true,
+        value: {
+          path: "src/big.ts",
+          content: "x".repeat(5_000),
+          startLine: 1,
+          endLine: 300,
+          totalLines: 300,
+          truncated: false,
+        },
+      },
+    );
+
+    const serialized = JSON.stringify(memory.request());
+    expect(serialized).toContain("contentChars");
+    expect(serialized).not.toContain("x".repeat(2_000));
+  });
 });
 
 describe("RepositoryReadCache", () => {

@@ -4,6 +4,7 @@ import type { ModelAdapter, ModelRequest } from "./types";
 
 export const DEFAULT_DEEPSEEK_MODEL = "deepseek-flash";
 export const DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+export type DeepSeekReasoningEffort = "low" | "medium" | "high";
 
 interface DeepSeekChatClient {
   chat: {
@@ -42,6 +43,7 @@ export class DeepSeekTransport implements ModelTransport {
   constructor(
     private readonly client: DeepSeekChatClient,
     private readonly model: string,
+    private readonly reasoningEffort: DeepSeekReasoningEffort,
   ) {}
 
   async send(request: ModelRequest, signal: AbortSignal): Promise<unknown> {
@@ -50,7 +52,7 @@ export class DeepSeekTransport implements ModelTransport {
         model: this.model,
         messages: request.messages.map(({ role, content }) => ({ role, content })),
         thinking: { type: "enabled" },
-        reasoning_effort: "high",
+        reasoning_effort: this.reasoningEffort,
         response_format: { type: "json_object" },
         stream: false,
       }, { signal });
@@ -78,6 +80,7 @@ export class DeepSeekTransport implements ModelTransport {
 export function createDeepSeekModel(options: {
   apiKey: string;
   model?: string;
+  reasoningEffort?: DeepSeekReasoningEffort;
   client?: DeepSeekChatClient;
 }): ModelAdapter {
   const client = options.client ?? (new OpenAI({
@@ -86,7 +89,11 @@ export function createDeepSeekModel(options: {
     maxRetries: 0,
   }) as unknown as DeepSeekChatClient);
   return new StructuredModelAdapter(
-    new DeepSeekTransport(client, options.model ?? DEFAULT_DEEPSEEK_MODEL),
+    new DeepSeekTransport(
+      client,
+      options.model ?? DEFAULT_DEEPSEEK_MODEL,
+      options.reasoningEffort ?? "medium",
+    ),
     { requestTimeoutMs: 120_000, maxAttempts: 2 },
   );
 }

@@ -25,7 +25,7 @@ describe("interactive run wizard", () => {
       "--provider", "openrouter",
       "--model", "example/model",
       "--repository-map", "enabled",
-      "--max-steps", "40",
+      "--max-steps", "32",
       "--max-model-calls", "25",
       "--max-minutes", "10",
       "--output", "/tmp/run",
@@ -33,6 +33,19 @@ describe("interactive run wizard", () => {
     expect(output.join("\n")).toContain("API key:        loaded");
     expect(output.join("\n")).not.toContain("secret");
     expect(questions[0]).toEqual(["1/9 Repository path", undefined]);
+    expect(questions[1]).toEqual(["2/9 GitHub issue URL, task, or @task-file", undefined]);
+  });
+
+  test("treats GitHub issue URLs as issue inputs", () => {
+    const answers = ["/repo", "https://github.com/o/r/issues/12", "", "", "", "", "", "", "", ""];
+    const argv = collectInteractiveRunArguments({
+      ask: () => answers.shift() ?? null,
+      cwd: "/cwd",
+      env: { AI_API_KEY: "secret" },
+    });
+
+    expect(argv).toContain("--issue");
+    expect(argv).toContain("https://github.com/o/r/issues/12");
   });
 
   test("can be cancelled before execution", () => {

@@ -33,12 +33,35 @@ describe("DeepSeek model transport", () => {
     expect(request).toMatchObject({
       model: "deepseek-flash",
       thinking: { type: "enabled" },
-      reasoning_effort: "high",
+      reasoning_effort: "medium",
       response_format: { type: "json_object" },
       stream: false,
     });
     expect(options.signal).toBeInstanceOf(AbortSignal);
     expect(JSON.stringify(request)).not.toContain("not-forwarded");
+  });
+
+  test("allows higher reasoning effort for harder runs", async () => {
+    let request: any;
+    const model = createDeepSeekModel({
+      apiKey: "secret",
+      reasoningEffort: "high",
+      client: {
+        chat: {
+          completions: {
+            async create(nextRequest) {
+              request = nextRequest;
+              return {
+                choices: [{ message: { content: JSON.stringify({ action: { type: "inspect_diff" } }) } }],
+              };
+            },
+          },
+        },
+      },
+    });
+
+    await model.complete({ messages: [] });
+    expect(request.reasoning_effort).toBe("high");
   });
 
   test("maps authentication errors without retrying", async () => {

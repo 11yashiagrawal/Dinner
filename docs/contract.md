@@ -15,18 +15,18 @@ The stable headless interface will be:
 ```text
 bun run src/cli.ts run \
   --repo <absolute-or-relative-repository-path> \
-  (--task <text> | --task-file <path>) \
+  (--issue <github-issue-url> | --task <text> | --task-file <path>) \
   [--output <artifact-directory>] \
   [--max-steps <positive-integer>] \
   [--max-minutes <positive-number>] \
   [--max-model-calls <positive-integer>]
 ```
 
-During development, OpenRouter and the direct DeepSeek OpenAI-compatible API are live providers. Select them with `--provider openrouter|deepseek`; their credentials are held in `AI_API_KEY` and `DEEPSEEK_API_KEY` respectively. `--model-script <path>` supplies a validated JSON array of fake-model decisions and does not require a key. Neither development transport is assumed to be the official evaluation transport.
+During development, OpenRouter and the direct DeepSeek OpenAI-compatible API are live providers. Select them with `--provider openrouter|deepseek`; their credentials are held in `AI_API_KEY` and `DEEPSEEK_API_KEY` respectively. DeepSeek reasoning effort defaults to `medium` and can be set with `--reasoning-effort low|medium|high`. `--model-script <path>` supplies a validated JSON array of fake-model decisions and does not require a key. Neither development transport is assumed to be the official evaluation transport.
 
 `make run` invokes the same entrypoint. When attached to an interactive terminal, a missing task may be prompted for. In a noninteractive process, missing required input is an error rather than a prompt. OpenRouter live runs are explicitly identified as development evaluation until the organizer transport is known.
 
-The input repository is never modified by default. Each run creates an isolated working copy beneath its artifact directory. Model edits are limited to validated actions against that copy, including atomic Git patch application and guarded whole-file text replacement. A successful or partial run preserves that working copy for inspection.
+The input repository is never modified during autonomous work. Each run creates an isolated working copy beneath its artifact directory. Model edits are limited to validated actions against that copy, including atomic Git patch application and guarded whole-file text replacement. A successful or partial run preserves that working copy for inspection. Interactive runs may offer to apply the final patch back to the source repository after the run finishes.
 
 ## Result contract
 

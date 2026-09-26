@@ -38,6 +38,24 @@ describe("loadRunConfig", () => {
     expect(config.model).toBe("openai/gpt-5.2");
   });
 
+  test("loads a fetched issue as the task", async () => {
+    const cwd = await temporaryDirectory();
+    const config = await loadRunConfig({
+      argv: ["--repo", ".", "--issue", "https://github.com/o/r/issues/1"],
+      cwd,
+      env: { AI_API_KEY: "secret" },
+      issueFetcher: async (url) => ({
+        url,
+        title: "Fix compact filters",
+        body: "Expected behavior.",
+      }),
+    });
+
+    expect(config.task).toContain("Source issue: https://github.com/o/r/issues/1");
+    expect(config.task).toContain("Title: Fix compact filters");
+    expect(config.task).toContain("Expected behavior.");
+  });
+
   test("reads a task file", async () => {
     const cwd = await temporaryDirectory();
     await writeFile(join(cwd, "issue.txt"), "  Repair empty input handling.  \n");
@@ -79,7 +97,15 @@ describe("loadRunConfig", () => {
         cwd,
         env: { AI_API_KEY: "secret" },
       }),
-    ).rejects.toThrow("either --task or --task-file");
+    ).rejects.toThrow("Use only one of");
+    expect(
+      loadRunConfig({
+        argv: ["--repo", ".", "--task", "one", "--issue", "https://github.com/o/r/issues/1"],
+        cwd,
+        env: { AI_API_KEY: "secret" },
+        issueFetcher: async () => ({ url: "x", title: "x", body: "" }),
+      }),
+    ).rejects.toThrow("Use only one of");
   });
 
   test("requires a credential without printing its value", async () => {
@@ -156,8 +182,19 @@ describe("loadRunConfig", () => {
     });
     expect(config.provider).toBe("deepseek");
     expect(config.model).toBe("deepseek-flash");
+    expect(config.reasoningEffort).toBe("medium");
     expect(config.apiKey).toBe("deep-secret");
     expect(JSON.stringify(toPublicRunConfig(config))).not.toContain("deep-secret");
+  });
+
+  test("accepts explicit DeepSeek reasoning effort", async () => {
+    const cwd = await temporaryDirectory();
+    const config = await loadRunConfig({
+      argv: ["--repo", ".", "--task", "Fix it", "--provider", "deepseek", "--reasoning-effort", "high"],
+      cwd,
+      env: { DEEPSEEK_API_KEY: "deep-secret" },
+    });
+    expect(config.reasoningEffort).toBe("high");
   });
 
   test("infers DeepSeek when it is the only configured credential", async () => {

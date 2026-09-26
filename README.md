@@ -47,7 +47,7 @@ export AI_API_KEY="your-openrouter-key"
 export OPENROUTER_MODEL="openai/gpt-5.2"
 ```
 
-OpenRouter is the live development provider until the organizer publishes its official transport. Override the model per run with `--model <openrouter-model-id>`. The CLI accepts either `--task` or `--task-file`, never both. If neither is supplied, it prompts only when connected to an interactive terminal; headless execution exits with an error.
+OpenRouter is the live development provider until the organizer publishes its official transport. Override the model per run with `--model <openrouter-model-id>`. The CLI accepts one task source: `--issue`, `--task`, or `--task-file`. If none is supplied, it prompts only when connected to an interactive terminal; headless execution exits with an error.
 
 Direct DeepSeek runs use the OpenAI-compatible API without routing through OpenRouter:
 
@@ -55,10 +55,11 @@ Direct DeepSeek runs use the OpenAI-compatible API without routing through OpenR
 export DEEPSEEK_API_KEY="your-deepseek-key"
 export MODEL_PROVIDER="deepseek"
 export DEEPSEEK_MODEL="deepseek-flash"
+export DEEPSEEK_REASONING_EFFORT="medium"
 make run
 ```
 
-DeepSeek requests enable thinking with high reasoning effort and use a 120-second request timeout. Select `deepseek` in the guided wizard, or pass `--provider deepseek --model deepseek-flash` in a headless run.
+DeepSeek requests enable thinking with medium reasoning effort by default and use a 120-second request timeout. Select `deepseek` in the guided wizard, or pass `--provider deepseek --model deepseek-flash --reasoning-effort high` in a headless run when a task needs more reasoning.
 
 For a guided run, invoke the command without arguments in a terminal:
 
@@ -66,21 +67,27 @@ For a guided run, invoke the command without arguments in a terminal:
 make run
 ```
 
-The wizard asks for the repository, task (or an `@/path/to/task.md` file), model, repository map, budgets, and output directory, then shows the full configuration before starting. During execution, numbered terminal events show every model action and every redacted tool result, including captured command output previews. Complete command logs remain in the run's `checks/` directory.
+The wizard asks for the repository, GitHub issue URL/task/`@task-file`, model, repository map, budgets, and output directory, then shows the full configuration before starting. During execution, numbered terminal events show every model action and every redacted tool result, including captured command output previews. Complete command logs remain in the run's `checks/` directory. When an interactive run produces changes, Dinner asks whether to apply the generated patch back to the source repository.
+
+For issue-driven runs:
+
+```bash
+make run ARGS="--repo /path/to/repo --issue https://github.com/owner/repo/issues/123 --provider deepseek --repository-map enabled"
+```
 
 Direct invocation exposes optional budgets:
 
 ```bash
 AI_API_KEY="$AI_API_KEY" bun run src/cli.ts run \
   --repo . \
-  --task-file ./issue.txt \
+  --issue https://github.com/owner/repo/issues/123 \
   --output /tmp/dinner-manual \
-  --max-steps 40 \
+  --max-steps 32 \
   --max-minutes 20 \
-  --max-model-calls 30
+  --max-model-calls 18
 ```
 
-Additional controls include `--max-repair-attempts`, `--verification-reserve-steps`, `--max-stagnation-interventions`, `--max-context-chars`, `--repository-map enabled`, and `--color disabled`. Run `make run ARGS="--help"` for the authoritative list.
+Additional controls include `--max-repair-attempts`, `--verification-reserve-steps`, `--max-stagnation-interventions`, `--max-context-chars`, `--repository-map enabled`, `--reasoning-effort medium`, and `--color disabled`. Run `make run ARGS="--help"` for the authoritative list.
 
 The experimental `--repository-map enabled` option adds bounded, ranked source-file and symbol candidates to the initial model context. It remains disabled by default: development-fixture localization improved from 0/6 metadata-only candidates to 6/6 relevant files in the top three, but this surrogate comparison does not establish a solve-rate or token improvement. The comparison and limitations are recorded in `benchmarks/reports/localization-comparison-2026-09-26.json`.
 

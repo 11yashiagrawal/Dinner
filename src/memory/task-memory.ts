@@ -6,10 +6,10 @@ import type { TaskMemoryLimits, TaskMemorySnapshot } from "./types";
 interface TurnPair { assistant: ModelMessage; user: ModelMessage }
 
 const DEFAULT_LIMITS: TaskMemoryLimits = {
-  maxContextChars: 48_000,
-  reserveResponseChars: 8_000,
-  maxRecentPairs: 8,
-  maxEntryChars: 2_000,
+  maxContextChars: 32_000,
+  reserveResponseChars: 6_000,
+  maxRecentPairs: 5,
+  maxEntryChars: 1_200,
 };
 
 function clipped(value: unknown, maxChars: number): string {
@@ -19,6 +19,42 @@ function clipped(value: unknown, maxChars: number): string {
 
 function messageChars(messages: readonly ModelMessage[]): number {
   return messages.reduce((total, message) => total + message.content.length, 0);
+}
+
+function compactObservation(action: ModelAction, observation: unknown): unknown {
+  if (
+    action.type === "read_file" &&
+    typeof observation === "object" &&
+    observation !== null &&
+    "ok" in observation &&
+    (observation as { ok?: unknown }).ok === true
+  ) {
+    const value = (observation as { value?: unknown }).value;
+    if (typeof value === "object" && value !== null && "content" in value) {
+      const read = value as {
+        path?: unknown;
+        content?: unknown;
+        startLine?: unknown;
+        endLine?: unknown;
+        totalLines?: unknown;
+        truncated?: unknown;
+      };
+      const content = typeof read.content === "string" ? read.content : "";
+      return {
+        ok: true,
+        value: {
+          path: read.path,
+          startLine: read.startLine,
+          endLine: read.endLine,
+          totalLines: read.totalLines,
+          truncated: read.truncated,
+          contentChars: content.length,
+          excerpt: clipped(content, 700),
+        },
+      };
+    }
+  }
+  return observation;
 }
 
 export class TaskMemory {
@@ -60,10 +96,10 @@ export class TaskMemory {
 
   recordObservation(action: ModelAction, observation: unknown): void {
     const assistant = this.pendingAssistant ?? { role: "assistant", content: JSON.stringify({ action: action.type }) };
-    const user = { role: "user" as const, content: `Observed result for ${action.type}:\n${clipped(observation, this.limits.maxEntryChars)}` };
+    const user = { role: "user" as const, content: `Observed result for ${action.type}:\n${clipped(compactObservation(action, observation), this.limits.maxEntryChars)}` };
     this.pairs.push({ assistant, user });
     this.pendingAssistant = null;
-    if (action.type === "read_file") this.pushUnique(this.findings, `${action.path}:${action.startLine ?? 1}-${action.endLine ?? "end"}: ${clipped(observation, 800)}`);
+    if (action.type === "read_file") this.pushUnique(this.findings, `${action.path}:${action.startLine ?? 1}-${action.endLine ?? "end"}: ${clipped(compactObservation(action, observation), 500)}`);
     this.compactPairs();
   }
 
