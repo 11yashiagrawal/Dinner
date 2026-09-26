@@ -75,6 +75,18 @@ For issue-driven runs:
 make run ARGS="--repo /path/to/repo --issue https://github.com/owner/repo/issues/123 --provider deepseek --repository-map enabled"
 ```
 
+The shorter Caramel issue command uses the optimized DeepSeek defaults:
+
+```bash
+make caramel REPO=/path/to/repo ISSUE=https://github.com/owner/repo/issues/123
+```
+
+For harder issues, override the budgets or reasoning:
+
+```bash
+make caramel REPO=/path/to/repo ISSUE=https://github.com/owner/repo/issues/123 REASONING=high MAX_STEPS=40 MAX_MODEL_CALLS=25 MAX_MINUTES=30
+```
+
 Direct invocation exposes optional budgets:
 
 ```bash

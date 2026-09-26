@@ -11,7 +11,7 @@ describe("documented execution contract", () => {
     const packageJson = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
     const makefile = await readFile(join(root, "Makefile"), "utf8");
     expect(packageJson.engines.bun).toBe(">=1.3.0 <2");
-    for (const target of ["setup:", "run:", "test:", "check:"]) expect(makefile).toContain(`\n${target}`);
+    for (const target of ["setup:", "run:", "caramel:", "test:", "check:"]) expect(makefile).toContain(`\n${target}`);
     expect(await readFile(join(root, ".env.example"), "utf8")).not.toMatch(/AI_API_KEY=\S+/);
   });
 
