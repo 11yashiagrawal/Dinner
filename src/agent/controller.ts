@@ -5,8 +5,8 @@ import {
   ModelError,
   type ModelAction,
   type ModelAdapter,
-  type ModelMessage,
 } from "../model";
+import { RepositoryReadCache, TaskMemory } from "../memory";
 import { RepositoryTools } from "../tools";
 import { createEvidence, discoverChecks, evidenceForFinalState, type VerificationEvidence } from "../verification";
 import { classifyCommandFailure, commandFailureDetail, type FailureKind, type FailureRecord } from "../recovery";
@@ -29,6 +29,7 @@ export interface AutonomousRunOptions {
   maxMinutes: number;
   maxModelCalls: number;
   maxRepairAttempts?: number;
+  maxContextChars?: number;
   apiKey?: string;
 }
 
@@ -55,14 +56,6 @@ Inspect before editing. Use unified Git patches for apply_patch. Create a checkp
 Label commands as setup, agent, or verification. Before finish, inspect the diff and run a relevant verification command after the final edit.
 Never claim a check passed unless its observed tool result says it passed. Do not remove assertions, disable tests, or modify evaluator inputs to manufacture success.`;
 
-function initialUserMessage(task: string, metadata: unknown, checks: unknown): string {
-  return `Task:\n${task}\n\nRepository metadata:\n${JSON.stringify(metadata, null, 2)}\n\nLikely checks discovered by the harness:\n${JSON.stringify(checks, null, 2)}`;
-}
-
-function observationMessage(action: ModelAction, observation: unknown): string {
-  return `Observed result for ${action.type}:\n${JSON.stringify(observation)}`;
-}
-
 async function currentState(workspace: IsolatedWorkspace): Promise<WorkspaceState> {
   const state = await workspace.inspectChanges();
   if (!state.ok) throw new Error(state.error.message);
@@ -75,6 +68,8 @@ async function dispatchAction(options: {
   workspace: IsolatedWorkspace;
   commandExecutor: CommandExecutor;
   checkpoints: Map<string, WorkspaceCheckpoint>;
+  readCache: RepositoryReadCache;
+  memory: TaskMemory;
   remainingTimeMs: number;
 }): Promise<ToolObservation> {
   const { action, repository, workspace, commandExecutor } = options;
@@ -98,11 +93,19 @@ async function dispatchAction(options: {
       });
       break;
     case "read_file":
-      result = await repository.readFile({
-        path: action.path,
-        ...(action.startLine === undefined ? {} : { startLine: action.startLine }),
-        ...(action.endLine === undefined ? {} : { endLine: action.endLine }),
-      });
+      result = options.readCache.get(action.path, action.startLine, action.endLine, before.patchSha256);
+      if (result === undefined) {
+        options.memory.recordReadCache(false);
+        const readResult = await repository.readFile({
+          path: action.path,
+          ...(action.startLine === undefined ? {} : { startLine: action.startLine }),
+          ...(action.endLine === undefined ? {} : { endLine: action.endLine }),
+        });
+        result = readResult;
+        options.readCache.set(action.path, action.startLine, action.endLine, before.patchSha256, readResult);
+      } else {
+        options.memory.recordReadCache(true);
+      }
       break;
     case "inspect_diff":
       result = await repository.inspectDiff();
@@ -219,10 +222,10 @@ export async function runAutonomousTask(
   )(workspace.workspacePath, checksPath);
   const metadata = await repository.metadata();
   const discoveredChecks = metadata.ok ? discoverChecks(metadata.value) : [];
-  const messages: ModelMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: initialUserMessage(options.task, metadata, discoveredChecks) },
-  ];
+  const memory = new TaskMemory(SYSTEM_PROMPT, options.task, { metadata, discoveredChecks }, {
+    ...(options.maxContextChars === undefined ? {} : { maxContextChars: options.maxContextChars }),
+  });
+  const readCache = new RepositoryReadCache();
   const usage = emptyUsageSummary();
   const checkpoints = new Map<string, WorkspaceCheckpoint>();
   const failures: FailureRecord[] = [];
@@ -268,10 +271,7 @@ export async function runAutonomousTask(
     let turn;
     try {
       modelCalls += 1;
-      turn = await dependencies.model.complete(
-        { messages },
-        { remainingTimeMs },
-      );
+      turn = await dependencies.model.complete(memory.request(), { remainingTimeMs });
       recordUsage(usage, turn.usage);
     } catch (error) {
       const modelError =
@@ -289,7 +289,7 @@ export async function runAutonomousTask(
         message: modelError.message,
         attempts: modelError.attempts,
       });
-      failures.push({
+      const failure: FailureRecord = {
         sequence: failures.length + 1,
         kind: "model",
         hypothesis: null,
@@ -297,12 +297,11 @@ export async function runAutonomousTask(
         detail: `${modelError.kind}: ${modelError.message}`,
         codeFingerprint: (await currentState(workspace)).patchSha256,
         countsAgainstRepairLimit: false,
-      });
+      };
+      failures.push(failure);
+      memory.recordFailure(failure);
       if (modelError.kind === "invalid_response" && modelCalls < options.maxModelCalls) {
-        messages.push({
-          role: "user",
-          content: `Your prior response was invalid: ${modelError.message} Return one valid structured action.`,
-        });
+        memory.recordInvalidResponse(modelError.message);
         continue;
       }
       status = statusForModelError(modelError);
@@ -312,7 +311,7 @@ export async function runAutonomousTask(
 
     const { decision } = turn;
     await events.write("model_decision", decision);
-    messages.push({ role: "assistant", content: JSON.stringify(decision) });
+    memory.recordDecision(decision);
 
     if (decision.action.type === "finish") {
       summary = decision.action.summary;
@@ -341,6 +340,8 @@ export async function runAutonomousTask(
         workspace,
         commandExecutor,
         checkpoints,
+        readCache,
+        memory,
         remainingTimeMs: Math.max(1, deadline - now()),
       });
       if (observation.workspaceChanged) {
@@ -366,6 +367,7 @@ export async function runAutonomousTask(
           baseline: state.changedFiles.length === 0,
         });
         verificationEvidence.push(evidence);
+        memory.recordCheck(evidence);
         verifiedPatchSha = evidence.status === "passed" && !observation.workspaceChanged
           ? state.patchSha256
           : null;
@@ -380,7 +382,7 @@ export async function runAutonomousTask(
         const countsAgainstRepairLimit =
           observation.failure.kind === "test" || observation.failure.kind === "patch";
         if (countsAgainstRepairLimit) repairAttempts += 1;
-        failures.push({
+        const failure: FailureRecord = {
           sequence: failures.length + 1,
           kind: observation.failure.kind,
           hypothesis: decision.intent ?? null,
@@ -388,17 +390,19 @@ export async function runAutonomousTask(
           detail: observation.failure.detail,
           codeFingerprint: state.patchSha256,
           countsAgainstRepairLimit,
-        });
+        };
+        failures.push(failure);
+        memory.recordFailure(failure);
         if (repairAttempts >= maxRepairAttempts) {
           status = "partial";
           terminationReason = `Repair limit reached after ${repairAttempts} code-related failures.`;
           break;
         }
       }
-      messages.push({ role: "user", content: observationMessage(decision.action, observation.result) });
+      memory.recordObservation(decision.action, observation.result);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      failures.push({
+      const failure: FailureRecord = {
         sequence: failures.length + 1,
         kind: "tool",
         hypothesis: decision.intent ?? null,
@@ -406,16 +410,15 @@ export async function runAutonomousTask(
         detail,
         codeFingerprint: (await currentState(workspace)).patchSha256,
         countsAgainstRepairLimit: false,
-      });
+      };
+      failures.push(failure);
+      memory.recordFailure(failure);
       await events.write("tool_result", {
         action: decision.action.type,
         workspaceChanged: false,
         error: detail,
       });
-      messages.push({
-        role: "user",
-        content: `Tool execution failed for ${decision.action.type}: ${detail}`,
-      });
+      memory.recordObservation(decision.action, { ok: false, error: detail });
     }
   }
 
@@ -461,6 +464,7 @@ export async function runAutonomousTask(
       checkpointsCreated,
       checkpointsRestored,
     },
+    memory: memory.snapshot(),
     metrics: {
       steps,
       modelCalls,

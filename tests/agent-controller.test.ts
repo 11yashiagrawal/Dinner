@@ -117,6 +117,7 @@ async function runWithScript(options: {
   script: readonly (ModelTurn | Error)[];
   maxSteps?: number;
   maxRepairAttempts?: number;
+  maxContextChars?: number;
 }) {
   const parent = await temporaryDirectory("dinner-agent-output-");
   const outputPath = join(parent, "run");
@@ -130,6 +131,7 @@ async function runWithScript(options: {
       maxMinutes: 2,
       maxModelCalls: 10,
       ...(options.maxRepairAttempts === undefined ? {} : { maxRepairAttempts: options.maxRepairAttempts }),
+      ...(options.maxContextChars === undefined ? {} : { maxContextChars: options.maxContextChars }),
     },
     {
       model,
@@ -330,5 +332,21 @@ describe("autonomous agent vertical slice", () => {
     });
     expect(result.recovery.repairAttempts).toBe(0);
     expect(result.recovery.failures[0]).toMatchObject({ kind: "setup", countsAgainstRepairLimit: false });
+  });
+
+  test("reuses unchanged reads and bypasses the cache after an edit", async () => {
+    const source = await codingFixture();
+    const { result } = await runWithScript({
+      source,
+      script: [
+        turn({ type: "read_file", path: "src/math.ts" }),
+        turn({ type: "read_file", path: "src/math.ts" }),
+        turn({ type: "apply_patch", patch: FIX_PATCH }),
+        turn({ type: "read_file", path: "src/math.ts" }),
+        turn({ type: "finish", summary: "Cache behavior inspected." }),
+      ],
+    });
+    expect(result.memory).toMatchObject({ readCacheHits: 1, readCacheMisses: 2 });
+    expect(result.status).toBe("partial");
   });
 });

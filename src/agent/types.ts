@@ -2,6 +2,7 @@ import type { CommandRequest, CommandResult } from "../execution";
 import type { ModelUsage } from "../model";
 import type { DiscoveredCheck, VerificationEvidence } from "../verification";
 import type { RecoverySummary } from "../recovery";
+import type { TaskMemorySnapshot } from "../memory";
 
 export type AgentStatus = "verified" | "partial" | "blocked" | "budget_exhausted" | "failed";
 
@@ -50,6 +51,7 @@ export interface AgentRunResult {
     lastResult: CommandResult | null;
   };
   recovery: RecoverySummary;
+  memory: TaskMemorySnapshot;
   metrics: {
     steps: number;
     modelCalls: number;
