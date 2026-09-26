@@ -1,0 +1,6 @@
+diff --git a/src/config.ts b/src/config.ts
+--- a/src/config.ts
++++ b/src/config.ts
+@@ -1 +1 @@
+-export const DEFAULT_PREFIX = "item";
++export const DEFAULT_PREFIX = "item-";

@@ -16,6 +16,7 @@ export interface DockerRunnerOptions {
   cpus?: number;
   memory?: string;
   pidsLimit?: number;
+  readOnlyMounts?: readonly { hostPath: string; containerPath: string }[];
 }
 
 interface DockerRunnerDependencies {
@@ -37,6 +38,7 @@ interface NormalizedDockerRunnerOptions {
   cpus: number;
   memory: string;
   pidsLimit: number;
+  readOnlyMounts: readonly { hostPath: string; containerPath: string }[];
 }
 
 const DEFAULT_OPTIONS = {
@@ -141,6 +143,7 @@ export function buildDockerRunArguments(options: {
   cpus: number;
   memory: string;
   pidsLimit: number;
+  readOnlyMounts?: readonly { hostPath: string; containerPath: string }[];
 }): string[] {
   const args = [
     "run",
@@ -170,6 +173,9 @@ export function buildDockerRunArguments(options: {
     "--workdir",
     options.containerCwd,
   ];
+  for (const mount of options.readOnlyMounts ?? []) {
+    args.push("--volume", `${mount.hostPath}:${mount.containerPath}:ro`);
+  }
   for (const [name, value] of Object.entries(options.environment).sort(([left], [right]) =>
     left.localeCompare(right),
   )) {
@@ -256,6 +262,17 @@ export class DockerCommandRunner {
     if (defaultTimeoutMs > maxTimeoutMs) {
       throw new Error("defaultTimeoutMs must not exceed maxTimeoutMs.");
     }
+    const readOnlyMounts: { hostPath: string; containerPath: string }[] = [];
+    for (const mount of options.readOnlyMounts ?? []) {
+      const hostPath = await realpath(resolve(mount.hostPath));
+      if (isInside(workspacePath, hostPath)) {
+        throw new Error("Read-only mounts must be outside the target workspace.");
+      }
+      if (!/^\/dinner-inputs\/[A-Za-z0-9_.-]+$/.test(mount.containerPath)) {
+        throw new Error("Read-only container paths must be direct children of /dinner-inputs.");
+      }
+      readOnlyMounts.push({ hostPath, containerPath: mount.containerPath });
+    }
 
     return new DockerCommandRunner(
       {
@@ -269,6 +286,7 @@ export class DockerCommandRunner {
         cpus: positiveNumber(options.cpus ?? DEFAULT_OPTIONS.cpus, "cpus"),
         memory: options.memory ?? DEFAULT_OPTIONS.memory,
         pidsLimit: positiveInteger(options.pidsLimit ?? DEFAULT_OPTIONS.pidsLimit, "pidsLimit"),
+        readOnlyMounts,
       },
       dependencies.backend ?? new DockerCliBackend(),
       dependencies.now ?? Date.now,
@@ -300,6 +318,7 @@ export class DockerCommandRunner {
         cpus: this.options.cpus,
         memory: this.options.memory,
         pidsLimit: this.options.pidsLimit,
+        readOnlyMounts: this.options.readOnlyMounts,
       });
       const process = this.backend.run(args);
       runningProcess = process;

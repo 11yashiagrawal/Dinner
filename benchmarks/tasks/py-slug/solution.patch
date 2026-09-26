@@ -1,0 +1,6 @@
+diff --git a/slug.py b/slug.py
+--- a/slug.py
++++ b/slug.py
+@@ -4 +4 @@
+-    return re.sub(r"[^a-z0-9]+", "-", value.lower())
++    return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")

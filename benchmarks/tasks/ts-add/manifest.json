@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "ts-add",
+  "title": "Repair integer addition",
+  "language": "typescript",
+  "issue": "add() subtracts its right operand. Make it return the arithmetic sum.",
+  "fixtureSha256": "9d479a3642cb17ef2db27416e4e2e3676c0d744cdb10e9ec0ec50caa6450d3b6",
+  "evaluatorSha256": "72adbdc3ba1f4d7a95ed2f36dc285d6e1f38879cccf4fb1f6183d8973df9c43d",
+  "solutionSha256": "825cac46e1d9fac63f3d0a91779e355d939f58252f3306ae2470b4835499fefb",
+  "setup": [],
+  "checks": [
+    { "name": "hidden edge cases", "kind": "task", "command": "cd \"$DINNER_EVALUATOR\" && bun test ./task.check.ts", "timeoutMs": 30000 },
+    { "name": "public regression suite", "kind": "regression", "command": "bun run test", "timeoutMs": 30000 }
+  ],
+  "budget": { "maxSteps": 8, "maxMinutes": 5, "maxModelCalls": 8 }
+}

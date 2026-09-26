@@ -86,6 +86,7 @@ describe("Docker command construction", () => {
       cpus: 2,
       memory: "2g",
       pidsLimit: 256,
+      readOnlyMounts: [{ hostPath: "/tmp/evaluator", containerPath: "/dinner-inputs/evaluator" }],
     });
 
     expect(args).toContain("--read-only");
@@ -93,6 +94,7 @@ describe("Docker command construction", () => {
     expect(args).toContain("ALL");
     expect(args).toContain("bridge");
     expect(args).toContain("/tmp/work space:/workspace:rw");
+    expect(args).toContain("/tmp/evaluator:/dinner-inputs/evaluator:ro");
     expect(args).not.toContain("/var/run/docker.sock");
     expect(args.slice(-4)).toEqual(["dinner-runner:0.1.0", "/bin/sh", "-lc", "bun test"]);
   });
@@ -218,5 +220,20 @@ describe("DockerCommandRunner", () => {
       }),
     ).rejects.toThrow("outside the target workspace");
     expect(await Bun.file(join(workspace, "new")).exists()).toBeFalse();
+  });
+
+  test("rejects evaluator mounts inside the writable workspace", async () => {
+    const workspace = await temporaryDirectory("dinner-workspace-");
+    const logs = await temporaryDirectory("dinner-logs-");
+    await mkdir(join(workspace, "evaluator"));
+    await expect(
+      DockerCommandRunner.create({
+        workspacePath: workspace,
+        logsPath: logs,
+        readOnlyMounts: [
+          { hostPath: join(workspace, "evaluator"), containerPath: "/dinner-inputs/evaluator" },
+        ],
+      }),
+    ).rejects.toThrow("outside the target workspace");
   });
 });

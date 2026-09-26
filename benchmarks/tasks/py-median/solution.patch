@@ -1,0 +1,13 @@
+diff --git a/stats.py b/stats.py
+--- a/stats.py
++++ b/stats.py
+@@ -1,2 +1,8 @@
+ def median(values: list[float]) -> float:
+-    raise NotImplementedError("median is not implemented")
++    if not values:
++        raise ValueError("median requires at least one value")
++    ordered = sorted(values)
++    middle = len(ordered) // 2
++    if len(ordered) % 2:
++        return ordered[middle]
++    return (ordered[middle - 1] + ordered[middle]) / 2

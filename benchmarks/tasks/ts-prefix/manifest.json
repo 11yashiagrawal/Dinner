@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "ts-prefix",
+  "title": "Restore the ID separator",
+  "language": "typescript",
+  "issue": "formatId() omits the separator between the configured prefix and numeric ID.",
+  "fixtureSha256": "2e0ff2718c256748cdd9c54ba368575c87655580424b1fc3cb181ea8cab2a314",
+  "evaluatorSha256": "36a2c3d7485e3cc8a9ba2ef7301a9ed402f0aabb634fe3b03aab6b032fd838db",
+  "solutionSha256": "e7b750cc44f6948ee75a58bc38b365cda21fee74ee2f1fb8f2e8ae8d180afe4d",
+  "setup": [],
+  "checks": [
+    { "name": "hidden edge cases", "kind": "task", "command": "cd \"$DINNER_EVALUATOR\" && bun test ./task.check.ts", "timeoutMs": 30000 },
+    { "name": "public regression suite", "kind": "regression", "command": "bun run test", "timeoutMs": 30000 }
+  ],
+  "budget": { "maxSteps": 8, "maxMinutes": 5, "maxModelCalls": 8 }
+}

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "bun run src/cli.ts",
+    "benchmark": "bun run src/benchmark/cli.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "check": "bun run typecheck && bun test"
