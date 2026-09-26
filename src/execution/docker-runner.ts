@@ -1,7 +1,7 @@
 import { createWriteStream } from "node:fs";
-import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { once } from "node:events";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { DockerCliBackend, type DockerBackend, type RunningDockerProcess } from "./docker-backend";
 import type { CommandOutput, CommandRequest, CommandResult } from "./types";
 
@@ -77,6 +77,28 @@ function isInside(root: string, candidate: string): boolean {
     pathFromRoot === "" ||
     (pathFromRoot !== ".." && !pathFromRoot.startsWith(`..${sep}`) && !isAbsolute(pathFromRoot))
   );
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+async function canonicalizeProspectivePath(path: string): Promise<string> {
+  let ancestor = resolve(path);
+  const missingSegments: string[] = [];
+  while (!(await pathExists(ancestor))) {
+    const parent = dirname(ancestor);
+    if (parent === ancestor) break;
+    missingSegments.unshift(basename(ancestor));
+    ancestor = parent;
+  }
+  return resolve(await realpath(ancestor), ...missingSegments);
 }
 
 export function sanitizeContainerEnvironment(
@@ -217,7 +239,7 @@ export class DockerCommandRunner {
   ): Promise<DockerCommandRunner> {
     const workspacePath = await realpath(resolve(options.workspacePath));
     if (!(await stat(workspacePath)).isDirectory()) throw new Error("workspacePath must be a directory.");
-    const logsPath = resolve(options.logsPath);
+    const logsPath = await canonicalizeProspectivePath(options.logsPath);
     if (isInside(workspacePath, logsPath)) {
       throw new Error("logsPath must be outside the target workspace.");
     }

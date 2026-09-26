@@ -2,7 +2,9 @@
 
 Dinner is an autonomous coding harness for software-engineering tasks. It is being built in reviewable commits for the AI Harness Hackathon 2026.
 
-The current checkpoint provides the TypeScript/Bun skeleton, validates CLI inputs and structured model actions, offers bounded read-only repository inspection, and executes target commands in disposable Docker containers. The organizer-specific API transport, editing, and verification arrive in later commits; the CLI says this explicitly rather than pretending to run an agent.
+The current checkpoint provides the TypeScript/Bun skeleton, validates CLI inputs and structured model actions, inspects repositories, executes target commands in disposable Docker containers, and manages isolated edits with checkpoints and patch export. The organizer-specific API transport and autonomous controller arrive in later commits; the CLI says this explicitly rather than pretending to run an agent.
+
+Input repositories are never edited directly. The workspace manager snapshots tracked changes, deletions, staged content, and non-ignored untracked files into a separate Git worktree. Checkpoints and final patches are calculated against that exact snapshot, so supplied changes are part of the baseline rather than mistaken for agent edits.
 
 ## Requirements
 

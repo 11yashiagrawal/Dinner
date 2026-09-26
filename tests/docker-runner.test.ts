@@ -208,4 +208,15 @@ describe("DockerCommandRunner", () => {
     expect(JSON.stringify(result)).not.toContain("highly-sensitive-value");
     expect(backend.runArguments).toBeUndefined();
   });
+
+  test("rejects log directories physically inside the workspace", async () => {
+    const workspace = await temporaryDirectory("dinner-workspace-");
+    await expect(
+      DockerCommandRunner.create({
+        workspacePath: workspace,
+        logsPath: join(workspace, "new", "logs"),
+      }),
+    ).rejects.toThrow("outside the target workspace");
+    expect(await Bun.file(join(workspace, "new")).exists()).toBeFalse();
+  });
 });
